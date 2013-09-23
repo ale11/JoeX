@@ -1,0 +1,25 @@
+Flat plate verification test (http://turbmodels.larc.nasa.gov/flatplate.html)
+
+Flow conditions:
+----------------
+Re   = 5.*10^6;    // Reynolds number
+L    = 1.0;        // Length used for Re
+M    = 0.2;        // Mach number
+Pt   = 1e5;        // Stagnation pressure
+Tt   = 300;        // Stagnation temperature
+I    = 0.00039;    // Turbulence intensity
+mu_r = 0.009;      // Eddy/Laminar viscosity
+
+Input file variables:
+---------------------
+P = Pt / ((1 + ((gamma - 1)/2)*M^2)^(gamma/(gamma-1)));
+T = 300;
+R = Ru / Mw;
+a = (gamma * R * T)^0.5;
+U = M * a;
+rho = P / (R * T);
+nu = (U*L)/Re;
+mu = nu * rho;
+k = 3./2.*(I*U)^2;
+om = rho*k/(mu_r*mu);
+eps = rho*Cmu*k^2/(mu_r*mu)

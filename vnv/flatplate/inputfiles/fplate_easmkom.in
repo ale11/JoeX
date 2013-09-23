@@ -1,0 +1,86 @@
+##############################
+# Debugging Level:
+# ----------------------------
+#LOGGING_LEVEL = DEBUG_HI   # Shows all linear solver residuals
+#LOGGING_LEVEL = INFO_LO    # Shows part of the linear solver residuals
+LOGGING_LEVEL = INFO_HI        # Shows standard output 
+
+##############################
+# GAS PROPERTIES
+# ----------------------------
+RHO_REF      = 1.1295e+00
+P_REF        = 9.7250e+04
+T_REF        = 3.0000e+02
+MU_MODE      = POWERLAW
+MU_POWER_LAW = 0.0
+MU_REF       = 1.5686e-05                  
+
+##############################
+# RESTART FILE
+# ----------------------------
+RESTART = ../meshes/flatplate_273x193.cas
+#RESTART = ./restart.out    
+
+INIT_U    = 6.9438e+01 0.0 0.0 
+INIT_TURB = 1.1001e-3 8.8013e+03
+
+##############################
+# SOLVER SETTINGS
+# ----------------------------
+CFL = 10.0                  
+CFL_RAMP AFTER_ITER=5000  INTERVAL_ITER=100  FACTOR_CFL=1.01  MAX_CFL=100.0 
+
+NSTEPS = 50000                
+CHECK_INTERVAL = 10           
+WRITE_RESTART = 50000        
+
+TIME_INTEGRATION = BACKWARD_EULER_COUPLED   
+
+#LINEAR_SOLVER_NS = BCGSTAB
+LINEAR_SOLVER_NS = PETSC_GMRES
+
+LINEAR_SOLVER_NS_TRESHOLDS  MAX_ITER=30  ABS_RESID=1.0e-8  REL_RESID=1.0e-2
+UNDER_RELAXATION = 0.8
+
+#LINEAR_SOLVER_SCALARS = BCGSTAB
+LINEAR_SOLVER_SCALARS = PETSC_GMRES
+
+SPATIAL_SECOND_ORDER          # If commented out then first order in space for inviscid fluxes
+GRAD_RECONSTRUCTION  SCHEME=GREENGAUSS  LIMITER=YES  EPS=0.01
+
+##############################
+# BOUNDARY CONDITIONS
+# ----------------------------
+inlet-5  = FARFIELD 6.9438e+01 0.0 0.0 9.7250e+04 1.1295e+00 1.4 
+outlet-8 = CBC_SUBSONIC_OUTLET 9.7250e+04
+top-9    = CBC_SUBSONIC_OUTLET 9.7250e+04  
+wall-7   = WALL
+botsym-4 = SYMMETRY 
+sym-6    = SYMMETRY
+
+inlet-5.kine  = 1.1001e-3 
+outlet-8.kine = 1.1001e-3
+top-9.kine    = 1.1001e-3
+wall-7.kine   = 0.0
+
+inlet-5.omega  = 8.8013e+03
+outlet-8.omega = 8.8013e+03
+top-9.omega    = 8.8013e+03
+wall-7.omega   = HOOK
+
+###############################
+# PARAMETERS & CONSTANTS
+# -----------------------------
+EASM_TURB_SCALARS = 0
+
+#TRANSFORM_MESH
+SCL_MESH = 3.0
+
+##############################
+# RESULTS
+# ----------------------------
+WRITE_HISTORY
+
+WRITE_ALLVALUES
+
+WRITE_DATA FORMAT=TECPLOT NAME=full INTERVAL=5000 GEOM=ALL VARS= RHO vel press temp kine omega cmus muT residField resid_kine resid_omega rij_diag rij_offdiag turbTS fbstar strMag debug1 debug2
