@@ -3735,9 +3735,16 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
 
               double *phi_bfa = scalarTranspEqVector[kine_index].phi_bfa;
               double kine_fa  = phi_bfa[ifa];
+              double Skk = grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2];
 
-              // Boussinesq-like Reynolds stresses
-              double tmp = (1.0 - nonLinear[ifa])*1.0/3.0*(rho[icv0] + rho_bfa[ifa])*kine_fa;
+              // Laminar fluxes: -2/3*mul*Skk*deltaij
+              double tmp = 2.0/3.0*mul_fa[ifa]*Skk;
+              // Turbulent fluxes: -2/3*mut*Skk*deltaij
+              tmp += (1.0 - nonLinear[ifa]) * 2.0 / 3.0 * mut_fa[ifa] * Skk;
+              // -2/3*rho*k (only for Boussinesq turb models)
+              if (turbModel > NONE)
+                tmp += (1.0 - nonLinear[ifa])*1.0/3.0*(rho[icv0] + rho_bfa[ifa])*kine_fa;
+
               tauTurbij_nj[0] = -tmp*nVec[0];
               tauTurbij_nj[1] = -tmp*nVec[1];
               tauTurbij_nj[2] = -tmp*nVec[2];
@@ -3755,6 +3762,7 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
                                                  + rij_offdiag_fa[ifa][2]*nVec[1]
                                                  + rij_diag_fa[ifa][2]*nVec[2]);
 
+              // Add all contributions to rhs
               rhs_rhou[icv0][0] -= area*tauTurbij_nj[0];
               rhs_rhou[icv0][0] -= area*tauTurbij_nj[0];
               rhs_rhou[icv0][0] -= area*tauTurbij_nj[0];

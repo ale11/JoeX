@@ -1611,7 +1611,7 @@ void UgpWithCvCompFlow::addViscFlux(double *Frhou, double &FrhoE, double (*A0)[5
 
   // -2/3*mut*Skk*deltaij
   tmp = (1.0 - nonL) * 2.0 / 3.0 * mut * (grad_u_f[0][0] + grad_u_f[1][1] + grad_u_f[2][2]);
-  // -2/3*rho*k (only for turb models)
+  // -2/3*rho*k (only for Boussinesq turb models)
   if (turbModel > NONE) tmp += (1.0 - nonL) * 1.0 / 3.0 * (rho0 + rho1) * kine_fa;
 
   tauTurbij_nj[0] -= tmp * nVec[0];
