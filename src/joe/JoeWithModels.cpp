@@ -3738,9 +3738,9 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
               double Skk = grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2];
 
               // Laminar fluxes: -2/3*mul*Skk*deltaij
-              double tmp = 2.0/3.0*mul_fa[ifa]*Skk;
+              double tmp = 0.0; //2.0/3.0*mul_fa[ifa]*Skk;
               // Turbulent fluxes: -2/3*mut*Skk*deltaij
-              tmp += (1.0 - nonLinear[ifa]) * 2.0 / 3.0 * mut_fa[ifa] * Skk;
+              tmp += 0.0; //(1.0 - nonLinear[ifa]) * 2.0 / 3.0 * mut_fa[ifa] * Skk;
               // -2/3*rho*k (only for Boussinesq turb models)
               if (turbModel > NONE)
                 tmp += (1.0 - nonLinear[ifa])*1.0/3.0*(rho[icv0] + rho_bfa[ifa])*kine_fa;
