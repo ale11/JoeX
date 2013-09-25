@@ -196,7 +196,7 @@ if __name__=="__main__":
   plateSST.case_dir  = "vnv/flatplate"
   plateSST.cfg_file  = "fplate_sst.in"
   plateSST.test_iter = 100
-  plateSST.test_vals = [3.2143e+03,4.7643e-03,7.7084e+06]
+  plateSST.test_vals = [3.2140e+03,4.7690e-03,7.691700e+06]
   plateSST.joe_exec  = "joe 2"
   plateSST.timeout   = 1600
   plateSST.tol       = 0.001
