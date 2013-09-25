@@ -3738,12 +3738,12 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
               double Skk = grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2];
 
               // Laminar fluxes: -2/3*mul*Skk*deltaij
-              double tmp = 0.0; //-2.0/3.0*mul_fa[ifa]*Skk;
+              double tmp = -2.0/3.0 * mul_fa[ifa] * Skk;
               // Turbulent fluxes: -2/3*mut*Skk*deltaij
-              tmp -= 0.0; //(1.0 - nonLinear[ifa]) * 2.0 / 3.0 * mut_fa[ifa] * Skk;
+              tmp -= (1.0 - nonLinear[ifa]) * 2.0/3.0 * mut_fa[ifa] * Skk;
               // -2/3*rho*k (only for Boussinesq turb models)
               if (turbModel > NONE)
-                tmp -= (1.0 - nonLinear[ifa])*1.0/3.0*(rho[icv0] + rho_bfa[ifa])*kine_fa;
+                tmp -= (1.0 - nonLinear[ifa]) * 2.0/3.0 * rho_bfa[ifa] * kine_fa;
 
               tauTurbij_nj[0] = tmp*nVec[0];
               tauTurbij_nj[1] = tmp*nVec[1];
@@ -5311,16 +5311,16 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               double Skk = grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2];
 
               // Laminar fluxes: -2/3*mul*Skk*deltaij
-              double tmp = 2.0/3.0*mul_fa[ifa]*Skk;
+              double tmp = -2.0/3.0 * mul_fa[ifa] * Skk;
               // Turbulent fluxes: -2/3*mut*Skk*deltaij
-              tmp += (1.0 - nonLinear[ifa]) * 2.0 / 3.0 * mut_fa[ifa] * Skk;
+              tmp -= (1.0 - nonLinear[ifa]) * 2.0/3.0 * mut_fa[ifa] * Skk;
               // -2/3*rho*k (only for Boussinesq turb models)
               if (turbModel > NONE)
-                tmp += (1.0 - nonLinear[ifa])*1.0/3.0*(rho[icv0] + rho_bfa[ifa])*kineFA;
+                tmp -= (1.0 - nonLinear[ifa]) * 1.0/3.0 * (rho[icv0] + rho_bfa[ifa]) * kineFA;
 
-              tauTurbij_nj[0] = -tmp*nVec[0];
-              tauTurbij_nj[1] = -tmp*nVec[1];
-              tauTurbij_nj[2] = -tmp*nVec[2];
+              tauTurbij_nj[0] = tmp*nVec[0];
+              tauTurbij_nj[1] = tmp*nVec[1];
+              tauTurbij_nj[2] = tmp*nVec[2];
 
               // Nonlinear Reynolds stresses
               tauTurbij_nj[0] += nonLinear[ifa]*(rij_diag_fa[ifa][0]*nVec[0]
@@ -5335,9 +5335,9 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
                                                + rij_offdiag_fa[ifa][2]*nVec[1]
                                                + rij_diag_fa[ifa][2]*nVec[2]);
 
-              rhs[icv0][1] -= area*tauTurbij_nj[0];
-              rhs[icv0][2] -= area*tauTurbij_nj[1];
-              rhs[icv0][3] -= area*tauTurbij_nj[2];
+              rhs[icv0][1] += area*tauTurbij_nj[0];
+              rhs[icv0][2] += area*tauTurbij_nj[1];
+              rhs[icv0][3] += area*tauTurbij_nj[2];
               
               if (flagImplicit)
               {
