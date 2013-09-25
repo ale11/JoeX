@@ -3764,8 +3764,8 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
 
               // Add all contributions to rhs
               rhs_rhou[icv0][0] -= area*tauTurbij_nj[0];
-              rhs_rhou[icv0][0] -= area*tauTurbij_nj[0];
-              rhs_rhou[icv0][0] -= area*tauTurbij_nj[0];
+              rhs_rhou[icv0][1] -= area*tauTurbij_nj[1];
+              rhs_rhou[icv0][2] -= area*tauTurbij_nj[2];
             }
           }
         }
@@ -5307,10 +5307,37 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
             // Viscous flux
             if (mu_ref > 0.0)
             {
-              double tmp = 2.0 / 3.0 * ((mul_fa[ifa] + mut_fa[ifa]) * (grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2]) + rho_bfa[ifa] * kineFA);
-              rhs[icv0][1] -= area * tmp * nVec[0];
-              rhs[icv0][2] -= area * tmp * nVec[1];
-              rhs[icv0][3] -= area * tmp * nVec[2];
+              double tauTurbij_nj[3];
+              double Skk = grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2];
+
+              // Laminar fluxes: -2/3*mul*Skk*deltaij
+              double tmp = 2.0/3.0*mul_fa[ifa]*Skk;
+              // Turbulent fluxes: -2/3*mut*Skk*deltaij
+              tmp += (1.0 - nonLinear[ifa]) * 2.0 / 3.0 * mut_fa[ifa] * Skk;
+              // -2/3*rho*k (only for Boussinesq turb models)
+              if (turbModel > NONE)
+                tmp += (1.0 - nonLinear[ifa])*1.0/3.0*(rho[icv0] + rho_bfa[ifa])*kineFA;
+
+              tauTurbij_nj[0] = -tmp*nVec[0];
+              tauTurbij_nj[1] = -tmp*nVec[1];
+              tauTurbij_nj[2] = -tmp*nVec[2];
+
+              // Nonlinear Reynolds stresses
+              tauTurbij_nj[0] += nonLinear[ifa]*(rij_diag_fa[ifa][0]*nVec[0]
+                                               + rij_offdiag_fa[ifa][0]*nVec[1]
+                                               + rij_offdiag_fa[ifa][1]*nVec[2]);
+
+              tauTurbij_nj[1] += nonLinear[ifa]*(rij_offdiag_fa[ifa][0]*nVec[0]
+                                               + rij_diag_fa[ifa][1]*nVec[1]
+                                               + rij_offdiag_fa[ifa][2]*nVec[2]);
+
+              tauTurbij_nj[2] += nonLinear[ifa]*(rij_offdiag_fa[ifa][1]*nVec[0]
+                                               + rij_offdiag_fa[ifa][2]*nVec[1]
+                                               + rij_diag_fa[ifa][2]*nVec[2]);
+
+              rhs[icv0][1] -= area*tauTurbij_nj[0];
+              rhs[icv0][2] -= area*tauTurbij_nj[1];
+              rhs[icv0][3] -= area*tauTurbij_nj[2];
               
               if (flagImplicit)
               {
