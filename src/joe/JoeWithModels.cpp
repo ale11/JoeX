@@ -161,6 +161,7 @@ void JoeWithModels::initialHook()
           double phi2 = profilesIC[pos][5+iScal];
           phi[icv] = phi1 + fi*(phi2 - phi1);
         }
+
       updateCvData(phi, REPLACE_DATA);
     }
 
@@ -218,17 +219,13 @@ void JoeWithModels::initialHook()
     if (turbModel > NONE)
     {
       double *turb = new double[nScal];
+      for (int iScal = 0; iScal < nScal; iScal++)
+        turb[iScal] = 0.0;
+
       Param *pmy;
       if (getParam(pmy, "INIT_TURB"))
-      {
-        for (int i = 0; i < nScal; i++)
-          turb[i] = pmy->getDouble(i+1);
-      }
-      else
-      {
-        cerr << " Could not find the parameter INITIAL_CONDITION_TURB to set the initial field "<< endl;
-        throw(-1);
-      }
+        for (int iScal = 0; iScal < nScal; iScal++)
+          turb[iScal] = pmy->getDouble(iScal+1);
 
       for (int iScal = 0; iScal < nScal; iScal++)
       {
@@ -238,7 +235,10 @@ void JoeWithModels::initialHook()
         if (!checkScalarFlag(scalname))
           for (int icv=0; icv<ncv; icv++)
             phi[icv] = turb[iScal];
+
+        updateCvData(phi, REPLACE_DATA);
       }
+
       delete [] turb;
     }
   }
