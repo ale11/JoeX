@@ -186,7 +186,7 @@ if __name__=="__main__":
   plateSA.case_dir  = "vnv/flatplate"
   plateSA.cfg_file  = "fplate_sa.in"
   plateSA.test_iter = 100
-  plateSA.test_vals = [3.1246e+03, 9.0161e-05]
+  plateSA.test_vals = [3.1278e+03, 7.9620e-05]
   plateSA.joe_exec  = "joe 1"
   plateSA.timeout   = 1600
   plateSA.tol       = 0.001
@@ -196,7 +196,7 @@ if __name__=="__main__":
   plateSST.case_dir  = "vnv/flatplate"
   plateSST.cfg_file  = "fplate_sst.in"
   plateSST.test_iter = 100
-  plateSST.test_vals = [3.0887e+03,4.8567e-03,7.4949e+06]
+  plateSST.test_vals = [3.0887e+03, 4.8671e-03, 7.4930e+06]
   plateSST.joe_exec  = "joe 2"
   plateSST.timeout   = 1600
   plateSST.tol       = 0.001
@@ -206,7 +206,7 @@ if __name__=="__main__":
   plateEASMkom.case_dir  = "vnv/flatplate"
   plateEASMkom.cfg_file  = "fplate_easmkom.in"
   plateEASMkom.test_iter = 100
-  plateEASMkom.test_vals = [5.2915e+04, 3.0080e-02, 4.4128e+06]
+  plateEASMkom.test_vals = [5.2915e+04, 3.0101e-02, 4.4128e+06]
   plateEASMkom.joe_exec  = "joe 6"
   plateEASMkom.timeout   = 1600
   plateEASMkom.tol       = 0.001
