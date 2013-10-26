@@ -3,6 +3,7 @@
 #include "turbModels/TurbModel_KOM.h"
 #include "turbModels/TurbModel_KEps.h"
 #include "turbModels/TurbModel_KOMSST.h"
+#include "turbModels/TurbModel_SST2003.h"
 #include "turbModels/TurbModel_SA.h"
 #include "turbModels/TurbModel_V2F.h"
 #include "turbModels/TurbModel_EASM.h"

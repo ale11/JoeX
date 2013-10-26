@@ -48,12 +48,12 @@ public:
     turbTS = NULL;       registerScalar(turbTS, "turbTS", CV_DATA);
     turbLS = NULL;       registerScalar(turbLS, "turbLS", CV_DATA);
     muT    = NULL;       registerScalar(muT,    "muT",    CV_DATA);
-    tturb  = NULL; registerScalar(tturb, "tturb", CV_DATA);
-    tkol   = NULL; registerScalar(tkol, "tkol", CV_DATA);
-    trel   = NULL; registerScalar(trel, "trel", CV_DATA);
-    lturb  = NULL; registerScalar(lturb, "lturb", CV_DATA);
-    lkol   = NULL; registerScalar(lkol, "lkol", CV_DATA);
-    lrel   = NULL; registerScalar(lrel, "lrel", CV_DATA);
+    tturb  = NULL;       registerScalar(tturb, "tturb", CV_DATA);
+    tkol   = NULL;       registerScalar(tkol, "tkol", CV_DATA);
+    trel   = NULL;       registerScalar(trel, "trel", CV_DATA);
+    lturb  = NULL;       registerScalar(lturb, "lturb", CV_DATA);
+    lkol   = NULL;       registerScalar(lkol, "lkol", CV_DATA);
+    lrel   = NULL;       registerScalar(lrel, "lrel", CV_DATA);
   }
 
   virtual ~RansTurbASBMKEps() {}
@@ -303,11 +303,15 @@ public:
       double nu = calcMuLam(icv)/rho[icv];
       double LengthScale = CL*max(pow(kine[icv],1.5)/eps[icv], CETA*pow(nu,0.75)/pow(eps[icv],0.25));
 
+      lturb[icv] = CL*pow(kine[icv],1.5)/eps[icv];
+      lkol[icv] = CL*CETA*pow(nu,0.75)/pow(eps[icv],0.25);
+
       bool realizable = true;
       if (realizable)
       {
         double RealScale = pow(kine[icv],1.5)/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
         LengthScale = min(LengthScale, RealScale);
+        lrel[icv] = RealScale;
       }
 
       turbLS[icv] = LengthScale;

@@ -62,6 +62,35 @@ inline void matMultMatR3(double (*res)[3], double (*m1)[3], double (*m2)[3])  //
   }
 }
 
+inline void transMatR3(double (*m)[3])
+{
+  double temp;
+
+  temp    = m[0][1];
+  m[0][1] = m[1][0];
+  m[1][0] = temp;
+
+  temp    = m[0][2];
+  m[0][2] = m[2][0];
+  m[2][0] = temp;
+
+  temp    = m[1][2];
+  m[1][2] = m[2][1];
+  m[2][1] = temp;
+}
+
+inline void similMatR3(double (*res)[3], double (*m1)[3], double (*m2)[3])
+{
+  for (int k=0; k<3; k++)
+    for (int l=0; l<3; l++)
+    {
+      res[k][l] = 0.0;
+      for (int i=0; i<3; i++)
+        for (int j=0; j<3; j++)
+          res[k][l] += m1[i][k]*m1[j][l]*m2[i][j];
+    }
+}
+
 inline void matMultMatR5(double (*res)[5], double (*m1)[5], double (*m2)[5])  // m*m matrices
 {
   for (int i=0; i<5; i++)

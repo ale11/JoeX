@@ -666,7 +666,7 @@ public:   // member functions
 
   void smoothingVec(double (*input)[3])
   {
-    double vol_tot, vol_icv;
+    double vol_tot, vol_nbr;
     for (int icv = 0; icv < ncv; icv++)
     {
       vol_tot = cv_volume[icv];
@@ -682,12 +682,12 @@ public:   // member functions
       {
         int icv_nbr = nbocv_v[noc];
 
-        vol_icv = cv_volume[icv_nbr];
-        vol_tot += vol_icv;
+        vol_nbr = cv_volume[icv_nbr];
+        vol_tot += vol_nbr;
 
-        input[icv][0] += input[icv_nbr][0]*vol_icv;
-        input[icv][1] += input[icv_nbr][1]*vol_icv;
-        input[icv][2] += input[icv_nbr][2]*vol_icv;
+        input[icv][0] += input[icv_nbr][0]*vol_nbr;
+        input[icv][1] += input[icv_nbr][1]*vol_nbr;
+        input[icv][2] += input[icv_nbr][2]*vol_nbr;
       }
 
       input[icv][0] /= vol_tot;
@@ -698,7 +698,7 @@ public:   // member functions
 
   void smoothingScal(double *input)
   {
-    double vol_tot, vol_icv;
+    double vol_tot, vol_nbr;
     for (int icv = 0; icv < ncv; icv++)
     {
       vol_tot = cv_volume[icv];
@@ -712,10 +712,10 @@ public:   // member functions
       {
         int icv_nbr = nbocv_v[noc];
 
-        vol_icv = cv_volume[icv_nbr];
-        vol_tot += vol_icv;
+        vol_nbr = cv_volume[icv_nbr];
+        vol_tot += vol_nbr;
 
-        input[icv] += input[icv_nbr]*vol_icv;
+        input[icv] += input[icv_nbr]*vol_nbr;
       }
       input[icv] /= vol_tot;
     }
@@ -830,6 +830,9 @@ public:   // member functions
           if (param->getString() == "SYMMETRY")
           {
             // No viscous flux in this case (or yes!)
+            double nVec[3], pVec[3], qVec[3];
+            double mag;
+            double unitMat[3][3], rijMat[3][3], rijbarMat[3][3];
 
             for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
             {
@@ -845,6 +848,46 @@ public:   // member functions
               rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
               rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
 
+              rijMat[0][0] = rij_diag[icv0][0];
+              rijMat[0][1] = rij_offdiag[icv0][0];
+              rijMat[0][2] = rij_offdiag[icv0][1];
+
+              rijMat[1][0] = rijMat[0][1];
+              rijMat[1][1] = rij_diag[icv0][1];
+              rijMat[1][2] = rij_offdiag[icv0][2];
+
+              rijMat[2][0] = rijMat[0][2];
+              rijMat[2][1] = rijMat[1][2];
+              rijMat[2][2] = rij_diag[icv0][2];
+
+              // compute new coordinate system
+              mag = normVec3d(nVec, fa_normal[ifa]);
+
+              int nof_f = noofa_i[ifa];
+              int nof_l = noofa_i[ifa+1]-1;
+              vecMinVec3d(pVec, x_no[noofa_v[nof_f]], x_no[noofa_v[nof_l]]);
+              mag = normVec3d(pVec);
+
+              qVec[0] = nVec[1] * pVec[2] - nVec[2] * pVec[1];
+              qVec[1] = nVec[2] * pVec[0] - nVec[0] * pVec[2];
+              qVec[1] = nVec[0] * pVec[1] - nVec[1] * pVec[0];
+
+              // transform Reynolds stresses
+              unitMat[0][0] = nVec[0];   unitMat[0][1] = nVec[1];   unitMat[0][2] = nVec[2];
+              unitMat[1][0] = pVec[0];   unitMat[1][1] = pVec[1];   unitMat[1][2] = pVec[2];
+              unitMat[2][0] = qVec[0];   unitMat[2][1] = qVec[1];   unitMat[2][2] = qVec[2];
+
+              similMatR3(rijbarMat, unitMat, rijMat);
+
+              // shear stresses are zero
+              rijbarMat[0][1] = 0.0;
+              rijbarMat[1][0] = 0.0;
+              rijbarMat[0][2] = 0.0;
+              rijbarMat[2][0] = 0.0;
+
+              // transform Reynolds stresses back to original coordinate system
+              transMatR3(unitMat);
+              similMatR3(rijMat, unitMat, rijbarMat);
             }
           }
           // .............................................................................................

@@ -41,7 +41,7 @@
     real(dp), parameter                     :: a01 = (2.1_dp - a0) / 2.0_dp
 
     real(dp), parameter                     :: zero = 0.0_dp
-    real(dp), parameter                     :: small = 0.001_dp
+    real(dp), parameter                     :: small = 1.0e-03_dp
     real(dp), parameter                     :: fifth = 0.2_dp
     real(dp), parameter                     :: fourth = 0.25_dp
     real(dp), parameter                     :: third = 1.0_dp / 3.0_dp
@@ -665,7 +665,6 @@
 
     ! compute structure parameters
     eta_c1 = hat_wt/(hat_st + small)
-    !eta_c1 = hat_wt/hat_st
     eta_c2 = hat_wtt/hat_st
     
     if ((eta_c1 < zero) .or. (eta_c1 /= eta_c1)) eta_c1 = zero
@@ -673,17 +672,6 @@
 
     eta_r = sqrt(eta_c1)
     eta_f = zero 
-
-    do i = 1,3
-      do j = 1,3
-        do k = 1,3
-          hat_wt  = hat_wt + a(i,j)*wt(i,k)*wt(j,k)
-          hat_wtt = hat_wtt + a(i,j)*wtt(i,k)*wtt(j,k)
-          hat_st  = hat_st + a(i,j)*st(i,k)*st(j,k)
-          hat_x   = hat_x + a(i,j)*wtt(j,k)*st(k,i)
-        end do
-      end do
-    end do
     
     ! compute phis, chis, bets
     if (hat_st < zero) then

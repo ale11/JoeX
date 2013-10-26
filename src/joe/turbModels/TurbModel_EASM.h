@@ -285,12 +285,12 @@ public:
       a4 = tau/(GAMMA1 + 2.*GAMMA0*cmus_temp*e2t2);
 
       // Compute the Reynolds stresses
-      r11 = 1./3 - cmustau*(S11 - 1./3.*diverg[icv] - a2*a4*(S1kWk1 - W1kSk1) + 2.*a3*a4*(S1kSk1 - SijSij/3.));
-      r22 = 1./3 - cmustau*(S22 - 1./3.*diverg[icv] - a2*a4*(S2kWk2 - W2kSk2) + 2.*a3*a4*(S2kSk2 - SijSij/3.));
-      r33 = 1./3 - cmustau*(S33 - 1./3.*diverg[icv] - a2*a4*(S3kWk3 - W3kSk3) + 2.*a3*a4*(S3kSk3 - SijSij/3.));
-      r12 = -cmustau*(S12 - a2*a4*(S1kWk2 - W1kSk2) + 2.*a3*a4*S1kSk2);
-      r13 = -cmustau*(S23 - a2*a4*(S1kWk3 - W1kSk3) + 2.*a3*a4*S2kSk3);
-      r23 = -cmustau*(S13 - a2*a4*(S2kWk3 - W2kSk3) + 2.*a3*a4*S1kSk3);
+      r11 = 1.0/3.0 - cmustau*(S11 - 1.0/3.0*diverg[icv] + a2*a4*(S1kWk1 - W1kSk1) - 2.0*a3*a4*(S1kSk1 - SijSij/3.0));
+      r22 = 1.0/3.0 - cmustau*(S22 - 1.0/3.0*diverg[icv] + a2*a4*(S2kWk2 - W2kSk2) - 2.0*a3*a4*(S2kSk2 - SijSij/3.0));
+      r33 = 1.0/3.0 - cmustau*(S33 - 1.0/3.0*diverg[icv] + a2*a4*(S3kWk3 - W3kSk3) - 2.0*a3*a4*(S3kSk3 - SijSij/3.0));
+      r12 = -cmustau*(S12 + a2*a4*(S1kWk2 - W1kSk2) - 2.0*a3*a4*S1kSk2);
+      r13 = -cmustau*(S13 + a2*a4*(S1kWk3 - W1kSk3) - 2.0*a3*a4*S1kSk3);
+      r23 = -cmustau*(S23 + a2*a4*(S2kWk3 - W2kSk3) - 2.0*a3*a4*S2kSk3);
 
       rij_diag[icv][0] = -max(r11,0.)*2*kine[icv]*rho[icv];
       rij_diag[icv][1] = -max(r22,0.)*2*kine[icv]*rho[icv];
