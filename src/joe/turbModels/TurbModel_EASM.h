@@ -3,6 +3,10 @@
 
 #include "UgpWithCvCompFlow.h"
 
+// differences with standard EASM:
+// muT is being limited between zero and one.
+// -for production of w, I divide by a limited k/w.
+// -the production of w (instead of just k) is also being limited.
 
 class RansTurbEASM : virtual public UgpWithCvCompFlow
 {
@@ -32,8 +36,8 @@ public:
     GAMMA0  = 0.5*C11;
     GAMMA1  = 0.5*C10 + (CEPS2 - CEPS1)/(CEPS1 - 1.0);
     a1      = 0.5*(4./3. - C2);
-    a2      = 0.5*(2. - C4);
-    a3      = 0.5*(2. - C3);
+    a2      = 0.5*(2.0 - C4);
+    a3      = 0.5*(2.0 - C3);
 
     EASM_LIMIT_PK = getIntParam("EASM_LIMIT_PK", "1");
     easmTurbScal  = getIntParam("EASM_TURB_SCALARS", "0");
@@ -153,10 +157,10 @@ public:
     double S1kWk3, W1kSk3, S1kSk3;
     double S2kWk3, W2kSk3, S2kSk3;
 
-    double tau, R2, e2t2, e2t2G0, R2e2t2, p, q, r, a4;
+    double tau, e2t2, e2t2G0, R2e2t2, p, q, r, a4;
     double cmus_temp, cmustau;
     double a, b, d, t1, t2, t3, theta;
-    double PI  =3.141592653589793238462;
+    double PI = 3.141592653589793238462;
 
     double r11, r22, r33, r12, r13, r23;
 
@@ -201,46 +205,44 @@ public:
       W32 = -W23;
       W33 = 0.0;
 
-      SijSij = S11*S11 + S22*S22 + S33*S33 + 2.*S12*S12 + 2.*S13*S13 + 2.*S23*S23;
+      SijSij = S11*S11 + S22*S22 + S33*S33 + 2.0*S12*S12 + 2.0*S13*S13 + 2.0*S23*S23;
       WijWij = 2.*W12*W12 + 2.*W13*W13 + 2.*W23*W23;
 
-      S1kWk1 = S11*W11-S12*W12-S13*W13;
-      W1kSk1 = W11*S11+W12*S12+W13*S13;
-      S1kSk1 = S11*S11+S12*S12+S13*S13;
+      S1kWk1 = S11*W11 + S12*W21 + S13*W31;
+      W1kSk1 = W11*S11 + W12*S21 + W13*S31;
+      S1kSk1 = S11*S11 + S12*S21 + S13*S31;
 
-      S1kWk2 = S11*W12+S12*W22-S13*W13;
-      W1kSk2 = W11*S12+W12*S22+W13*S23;
-      S1kSk2 = S11*S12+S12*S22+S13*S23;
+      S2kWk2 = S21*W12 + S22*W22 + S23*W32;
+      W2kSk2 = W21*S12 + W22*S22 + W23*S32;
+      S2kSk2 = S21*S12 + S22*S22 + S23*S32;
 
-      S2kWk2 = S12*W12+S22*W22-S23*W23;
-      W2kSk2 = -W12*S12+W22*S22+W23*S23;
-      S2kSk2 = S12*S12+S22*S22+S23*S23;
+      S3kWk3 = S31*W13 + S32*W23 + S33*W33;
+      W3kSk3 = W31*S13 + W32*S23 + W33*W33;
+      S3kSk3 = S31*S13 + S32*S23 + S33*S33;
 
-      S3kWk3 = S31*W13+S32*W23+S33*W33;
-      W3kSk3 = W31*S13+W32*S23+W33*W33;
-      S3kSk3 = S31*S13+S32*S23+S33*S33;
+      S1kWk2 = S11*W12 + S12*W22 + S13*W32;
+      W1kSk2 = W11*S12 + W12*S22 + W13*S32;
+      S1kSk2 = S11*S12 + S12*S22 + S13*S32;
 
-      S1kWk3 = S11*W13+S12*W23+S13*W33;
-      W1kSk3 = W11*S13+W12*S23+W13*S33;
-      S1kSk3 = S11*S13+S12*S23+S13*S33;
+      S1kWk3 = S11*W13 + S12*W23 + S13*W33;
+      W1kSk3 = W11*S13 + W12*S23 + W13*S33;
+      S1kSk3 = S11*S13 + S12*S23 + S13*S33;
 
-      S2kWk3 = S21*W13+S22*W23+S23*W33;
-      W2kSk3 = W21*S13+W22*S23+W23*S33;
-      S2kSk3 = S21*S13+S22*S23+S23*S33;
+      S2kWk3 = S21*W13 + S22*W23 + S23*W33;
+      W2kSk3 = W21*S13 + W22*S23 + W23*S33;
+      S2kSk3 = S21*S13 + S22*S23 + S23*S33;
 
       tau = turbTS[icv];
-      e2t2   = min(SijSij*tau*tau,1200.);
-      R2e2t2 = min(WijWij*tau*tau,1200.);
-      //e2t2   = SijSij*tau*tau*1200/(sqrt(SijSij*tau*tau*SijSij*tau*tau + 1200*1200));
-      //R2e2t2 = WijWij*tau*tau*1200/(sqrt(WijWij*tau*tau*WijWij*tau*tau + 1200*1200));
+      e2t2   = SijSij*tau*tau;
+      R2e2t2 = WijWij*tau*tau;
       e2t2G0 = e2t2*GAMMA0;
       debug1[icv] = e2t2;
       debug2[icv] = R2e2t2;
 
       p = -GAMMA1/(e2t2G0);
-      q = (GAMMA1*GAMMA1 - 2.*e2t2G0*a1 - 2./3.*e2t2*a3*a3 + 2.*R2e2t2*a2*a2);
-      q /= 4.*e2t2G0*e2t2G0;
-      r = GAMMA1*a1/(4.*e2t2G0*e2t2G0);
+      q = (GAMMA1*GAMMA1 - 2.0*e2t2G0*a1 - 2.0/3.0*e2t2*a3*a3 + 2.0*R2e2t2*a2*a2);
+      q /= 4.0*e2t2G0*e2t2G0;
+      r = GAMMA1*a1/(4.0*e2t2G0*e2t2G0);
 
       // Compute Cmustar
       if (e2t2 < 1.0e-6)
@@ -250,39 +252,38 @@ public:
       {
         // find the roots
         a = q - p*p/3.;
-        b = (2*p*p*p - 9.*p*q + 27.*r)/27.;
-        d = (b*b)/4. + (a*a*a)/27.;
+        b = 1.0/27.0*(2*p*p*p - 9.0*p*q + 27.0*r);
+        d = (b*b)/4.0 + (a*a*a)/27.0;
         if (d > 0)
         {
           t1 = -0.5*b + sqrt(d);
           if (t1 > 0.0)
-            t1 = pow(fabs(t1), 1./3.);
+            t1 = pow(fabs(t1), 1.0/3.0);
           else
-            t1 = -pow(fabs(t1), 1./3.);
+            t1 = -pow(fabs(t1), 1.0/3.0);
 
           t2 = -0.5*b - sqrt(d);
           if (t2 > 0.0)
-            t2 = pow(fabs(t2), 1./3.);
+            t2 = pow(fabs(t2), 1.0/3.0);
           else
-            t2 = -pow(fabs(t2), 1./3.);
+            t2 = -pow(fabs(t2), 1.0/3.0);
 
-          cmus_temp = -min(-p/3. + t1 + t2, -p/3. - 0.5*t1 - 0.5*t2);
+          cmus_temp = -min(-p/3.0 + t1 + t2, -p/3.0 - 0.5*t1 - 0.5*t2);
         }
         else
         {
-          theta = acos(-0.5*b/sqrt(-a*a*a/27.));
-          t1 = -p/3. + 2.*sqrt(-a/3.)*cos(theta/3.);
-          t2 = -p/3. + 2.*sqrt(-a/3.)*cos(2./3.*PI + theta/3.);
-          t3 = -p/3. + 2.*sqrt(-a/3.)*cos(4./3.*PI + theta/3.);
+          theta = acos(-0.5*b/sqrt(-a*a*a/27.0));
+          t1 = -p/3.0 + 2.0*sqrt(-a/3.0)*cos(theta/3.);
+          t2 = -p/3.0 + 2.0*sqrt(-a/3.0)*cos(2.0/3.0*PI + theta/3.0);
+          t3 = -p/3.0 + 2.0*sqrt(-a/3.0)*cos(4.0/3.0*PI + theta/3.0);
           cmus_temp = -min(min(t1,t2),t3);
         }
       }
 
-      //cmus_temp = min(max(cmus_temp,0.0005),0.187);
       cmus_temp = max(cmus_temp,0.0005);
       cmustau = cmus_temp*tau;
 
-      a4 = tau/(GAMMA1 + 2.*GAMMA0*cmus_temp*e2t2);
+      a4 = tau/(GAMMA1 + 2.0*GAMMA0*cmus_temp*e2t2);
 
       // Compute the Reynolds stresses
       r11 = 1.0/3.0 - cmustau*(S11 - 1.0/3.0*diverg[icv] + a2*a4*(S1kWk1 - W1kSk1) - 2.0*a3*a4*(S1kSk1 - SijSij/3.0));
@@ -579,8 +580,8 @@ public:
     double nu, eps, timeScale, realScale;
     for (int icv = 0; icv < ncv; icv++)
     {
-      timeScale = 1./omega[icv];
-      timeScale = sqrt(timeScale*timeScale + 1.0e-12);//1.0e-6 limiter
+      timeScale = 1.0/omega[icv];
+      //timeScale = sqrt(timeScale*timeScale + 1.0e-12);//1.0e-6 limiter
 
       if (realizable)
       {
@@ -613,7 +614,7 @@ public:
   double getTurbProdKOm(int icv)
   {
     double mu_t = min(max(rho[icv]*cmus[icv]*kine[icv]/omega[icv], 0.0), 1.0);
-    double Pk = mu_t*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv];
+    double Pk = mu_t*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
 
     if (EASM_LIMIT_PK == 1)
       Pk = min(Pk, 20.0*fbstar[icv]*rho[icv]*kine[icv]*omega[icv]);
@@ -634,19 +635,17 @@ public:
 
   virtual void calcFbstarFunction()
   {
-    double chi;
-
     calcCvScalarGrad(grad_kine,  kine,  kine_bfa,  gradreconstruction, limiterNavierS, kine,  epsilonSDWLS);
     calcCvScalarGrad(grad_omega, omega, omega_bfa, gradreconstruction, limiterNavierS, omega, epsilonSDWLS);
 
     for (int icv = 0; icv < ncv; icv++)
     {
-      chi = C_MU_OM*C_MU_OM/(omega[icv]*omega[icv]*omega[icv])*vecDotVec3d(grad_kine[icv], grad_omega[icv]);
+      double chi = C_MU_OM*C_MU_OM/(omega[icv]*omega[icv]*omega[icv])*vecDotVec3d(grad_kine[icv], grad_omega[icv]);
 
       if (chi > 0.0)
-        fbstar[icv] = (1. + 680.*chi*chi)/(1. + 400*chi*chi);
+        fbstar[icv] = (1.0 + 680.0*chi*chi)/(1.0 + 400*chi*chi);
       else
-        fbstar[icv] = 1.;
+        fbstar[icv] = 1.0;
     }
   }
 
