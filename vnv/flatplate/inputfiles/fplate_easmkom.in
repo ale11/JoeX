@@ -18,7 +18,7 @@ MU_REF       = 1.5686e-05
 ##############################
 # RESTART FILE
 # ----------------------------
-RESTART = ../meshes/flatplate_273x193.cas
+RESTART = ../flatplate_273x193.cas
 #RESTART = ./restart.out    
 
 INIT_U    = 6.9438e+01 0.0 0.0 
