@@ -230,13 +230,27 @@ public:   // member functions
 
   virtual void calcRansTurbViscMuet()
   {
+//    if (step == start_asbm){
+//      for (int icv = 0; icv < ncv; icv++)
+//        eps[icv] = 0.09*kine[icv]*omega[icv];
+//      updateCvData(eps, REPLACE_DATA);
+//    }
+
     calcGradVel();
     calcStrainRateAndDivergence();
     calcTurbTimeScale();
     calcTurbLengthScale();
+    //if (step == start_asbm) calcTurbLengthScale();
 
     // Non-linear domain partitioning
     if (step == start_asbm) setNonLinearDomain();
+//    if (step == start_asbm)
+//      for (int ifa = 0; ifa < nfa; ifa++)
+//        nonLinear[ifa] = 0.1;
+//
+//    if ((step > start_asbm) && (step%100 == 0))
+//      for (int ifa = 0; ifa < nfa; ifa++)
+//        nonLinear[ifa] = min(nonLinear[ifa]*1.01, 1.0);
 
     // Computation of ASBM variables
     if (step >= start_asbm){

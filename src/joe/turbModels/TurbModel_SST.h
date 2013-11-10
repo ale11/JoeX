@@ -1,18 +1,18 @@
-#ifndef RANSTURBMODEL_SST2003_H
-#define RANSTURBMODEL_SST2003_H
+#ifndef RANSTURBMODEL_SST_H
+#define RANSTURBMODEL_SST_H
 
 #include "UgpWithCvCompFlow.h"
 
-class RansTurbSST2003 : virtual public UgpWithCvCompFlow
+class RansTurbSST : virtual public UgpWithCvCompFlow
 {
 public:
 
-  RansTurbSST2003()
+  RansTurbSST()
   {
     if (mpi_rank == 0)
-      cout << "RansTurbSST2003()" << endl;
+      cout << "RansTurbSST()" << endl;
 
-    turbModel = SST2003;
+    turbModel = SST;
 
     sigma_k1  = getDoubleParam("sigma_k1" , "0.85"   );
     sigma_k2  = getDoubleParam("sigma_k2" , "1.0"    );
@@ -22,8 +22,30 @@ public:
     beta_2    = getDoubleParam("beta_2"   , "0.0828" );
     betaStar  = getDoubleParam("betaStar" , "0.09"   );
     a1        = getDoubleParam("a1"       , "0.31"   );
-    gamma_1   = getDoubleParam("gamma_1"  , "0.55555");
-    gamma_2   = getDoubleParam("gamma_2"  , "0.44"   );
+
+    sst_form = getStringParam("SST_FORM", "STANDARD");
+
+    if (sst_form == "STANDARD")
+    {
+      gamma_1 = beta_1/betaStar - sigma_om1*pow(0.41, 2.0)/sqrt(betaStar);
+      gamma_2 = beta_2/betaStar - sigma_om2*pow(0.41, 2.0)/sqrt(betaStar);
+      boundPk = 20.0;
+      boundPw = 1.0e+12; // no effective limiter
+      boundCrossDiff = 1.0e-20;
+    }
+    else if (sst_form == "2003")
+    {
+      gamma_1 = getDoubleParam("gamma_1"  , "0.55555");
+      gamma_2 = getDoubleParam("gamma_2"  , "0.44"   );
+      boundPk = 10.0;
+      boundPw = 10.0;
+      boundCrossDiff = 1.0e-10;
+    }
+    else
+    {
+      cerr << "ERROR: SST model form specified not implemented." << endl;
+      throw(-1);
+    }
 
     ScalarTranspEq *eq;
     eq = registerScalarTransport("kine", CV_DATA);
@@ -45,6 +67,7 @@ public:
     eq->reconstruction = getStringParam("SCALAR_TURB_RECONSTRUCTION", "STANDARD");
 
     strMag      = NULL;   registerScalar(strMag     , "strMag"     , CV_DATA);
+    vortMag     = NULL;   registerScalar(vortMag    , "vortMag", CV_DATA);
     diverg      = NULL;   registerScalar(diverg     , "diverg"     , CV_DATA);
     muT         = NULL;   registerScalar(muT        , "muT"        , CV_DATA);
     crossDiff   = NULL;   registerScalar(crossDiff  , "crossDiff"  , CV_DATA);
@@ -54,43 +77,44 @@ public:
     wallConn    = NULL;   // array of integers
   }
 
-  virtual ~RansTurbSST2003() {}
+  virtual ~RansTurbSST() {}
 
 public:
 
-  int *wallConn;               ///< index of closest wall face
+  // model variables
+  int *wallConn;           ///< index of closest wall face
 
-  double *omega;               ///< specific dissipation
-  double (*grad_kine)[3];      ///< gradient of tke
-  double (*grad_omega)[3];     ///< gradient of omega
-  double *kine_bfa;            ///< tke at the boundaries
-  double *omega_bfa;           ///< omega at the boundaries
-  double *muT;                 ///< turbulent viscosity at cell center for output
-  double *wallDist;            ///< distance to closest wall face
-  double *crossDiff;           ///< cross-diffusion
-  double *blendFuncF1;         ///< first blending function
-  double *blendFuncF2;         ///< second blending function
+  double *omega;           ///< specific dissipation
+  double (*grad_kine)[3];  ///< gradient of tke
+  double (*grad_omega)[3]; ///< gradient of omega
+  double *kine_bfa;        ///< tke at the boundaries
+  double *omega_bfa;       ///< omega at the boundaries
+  double *muT;             ///< turbulent viscosity at cell center for output
+  double *wallDist;        ///< distance to closest wall face
+  double *crossDiff;       ///< cross-diffusion
+  double *blendFuncF1;     ///< first blending function
+  double *blendFuncF2;     ///< second blending function
+  double *limiterFunc;     ///< vort. vs. strain visc. limiter
+
+  string sst_form;         ///< various model forms: standard, 2003, etc.
   
-  double sigma_k1;
-  double sigma_k2;
-  double sigma_om1;
-  double sigma_om2;
-  double gamma_1;
-  double gamma_2;
-  double beta_1;
-  double beta_2;
-  double betaStar;
-  double a1;
+  // model constants
+  double sigma_k1, sigma_k2, sigma_om1, sigma_om2;
+  double gamma_1, gamma_2, beta_1, beta_2;
+  double betaStar, a1, boundPk, boundPw, boundCrossDiff;
 
 public:
 
   virtual void initialHookScalarRansTurbModel()
   {
     if (mpi_rank == 0) 
-      cout << "initialHookScalarRansTurbModel()" << endl;
+      cout << "initialHookScalarRansTurbModel() !!new SST model!!" << endl;
 
     wallConn = new int[ncv];
     calcWallDistance(wallConn, wallDist);
+
+    if      (sst_form == "STANDARD") limiterFunc = vortMag;
+    else if (sst_form == "2003")     limiterFunc = strMag;
 
     // connect pointers
     ScalarTranspEq *eq;
@@ -103,14 +127,16 @@ public:
     // update velocity gradients, cross-diffusion, blending functions
     calcGradVel();
     calcStrainRateAndDivergence();
+    calcVorticity();
     calcMenterBlendingFunctions();
 
     // eddy-viscosity at cell center
     for (int icv=0; icv<ncv; icv++)
     {
-      double zeta = min(1.0/omega[icv], a1/(strMag[icv]*blendFuncF2[icv]));
+      double zeta = min(1.0/omega[icv], a1/(limiterFunc[icv]*blendFuncF2[icv]));
       muT[icv] = min(max(rho[icv]*kine[icv]*zeta, 0.0), 1.0);
     }
+    updateCvData(muT, REPLACE_DATA);
 
     // internal faces
     for (int ifa=nfa_b; ifa<nfa; ifa++)
@@ -239,7 +265,7 @@ public:
       {
         double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
 
-        Pk = min(Pk, 10.0*betaStar*rho[icv]*kine[icv]*omega[icv]);
+        Pk = min(Pk, boundPk*betaStar*rho[icv]*kine[icv]*omega[icv]);
         Pk = max(Pk, 0.0);
 
         double src = Pk - betaStar*rho[icv]*omega[icv]*kine[icv];
@@ -261,10 +287,10 @@ public:
         double alfa = F1*gamma_1 + (1.0 - F1)*gamma_2;
         double beta = F1*beta_1 + (1.0 - F1)*beta_2;
 
-        double zeta = max(omega[icv], strMag[icv]*blendFuncF2[icv]/a1);
+        double zeta = max(omega[icv], limiterFunc[icv]*blendFuncF2[icv]/a1);
         double Pw = strMag[icv]*strMag[icv] - 2.0/3.0*zeta*diverg[icv];
 
-        Pw = min(Pw, 10.0*betaStar*omega[icv]*zeta);
+        Pw = min(Pw, boundPw*betaStar*omega[icv]*zeta);
         Pw = max(Pw, 0.0);
 
         double src = alfa*rho[icv]*Pw + (1.0 - F1)*crossDiff[icv] - beta*rho[icv]*omega[icv]*omega[icv];
@@ -293,16 +319,16 @@ public:
 
       double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
 
-      Pk = min(Pk, 10.0*betaStar*rho[icv]*kine[icv]*omega[icv]);
+      Pk = min(Pk, boundPk*betaStar*rho[icv]*kine[icv]*omega[icv]);
       Pk = max(Pk, 0.0);
 
       double src = Pk - betaStar*rho[icv]*omega[icv]*kine[icv];
       rhs[icv][5+kine_Index] += src*cv_volume[icv];
 
-      double zeta = max(omega[icv], strMag[icv]*blendFuncF2[icv]/a1);
+      double zeta = max(omega[icv], limiterFunc[icv]*blendFuncF2[icv]/a1);
       double Pw = strMag[icv]*strMag[icv] - 2.0/3.0*zeta*diverg[icv];
 
-      Pw = min(Pw, 10.0*betaStar*omega[icv]*zeta);
+      Pw = min(Pw, boundPw*betaStar*omega[icv]*zeta);
       Pw = max(Pw, 0.0);
 
       src = alfa*rho[icv]*Pw + (1.0 - F1)*crossDiff[icv] - beta*rho[icv]*omega[icv]*omega[icv];
@@ -345,7 +371,7 @@ public:
       double d = wallDist[icv];
       double mue = InterpolateAtCellCenterFromFaceValues(mul_fa, icv);
 
-      crossDiff[icv] = max(2.0*rho[icv]*sigma_om2/omega[icv]*vecDotVec3d(grad_kine[icv], grad_omega[icv]),  1.0e-10);
+      crossDiff[icv] = max(2.0*rho[icv]*sigma_om2/omega[icv]*vecDotVec3d(grad_kine[icv], grad_omega[icv]), boundCrossDiff);
 
       double gamma1 = 500.0*mue/(pow(d, 2.0)*rho[icv]*omega[icv]);
       double gamma2 = 4.0*sigma_om2*rho[icv]*kine[icv]/(d*d*crossDiff[icv]);

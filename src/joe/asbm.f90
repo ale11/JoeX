@@ -688,7 +688,7 @@
       end if
     else
       ! with strain
-      oma = 1 - trace_aa
+      oma = one - trace_aa
       sqamth = sqrt(trace_aa - third)
 
       if (eta_r < one) then
@@ -732,7 +732,7 @@
       ! blockage correction to phi and gamma
       trace_bl = bl(1,1) + bl(2,2) + bl(3,3)
 
-      phi = one - (one - trace_bl)**2 + phi*(one - trace_bl)**2
+      phi = one - (one - trace_bl)**2.0_dp + phi*(one - trace_bl)**2.0_dp
       scl_g = (one - trace_bl)*scl_g
       !chi = (one - trace_bl)*chi
     endif
@@ -764,7 +764,7 @@
     ! Output some useful data
     cir(1,1) = phi
     cir(1,2) = bet
-    cir(1,3) = chi1
+    cir(1,3) = chi
 
     cir(2,1) = eta_r
     cir(2,2) = eta_f
@@ -968,6 +968,7 @@
     ! constants
     real(dp), parameter     :: zero = 0.0_dp
     real(dp), parameter     :: one = 1.0_dp
+    real(dp), parameter     :: two = 2.0_dp
     
     ! variables
     real(dp)                :: eta_f1, eta_f0
@@ -984,13 +985,13 @@
       eta_f0 = eta_f - param*(eta_r - one) - param
     else if (eta_f < zero) then
       eta_f1 = zero
-      eta_f0 = eta_f/(1 - eta_r)
+      eta_f0 = eta_f/(one - eta_r)
     else if (eta_f < eta_r) then
       eta_f1 = eta_f/eta_r
       eta_f0 = zero
     else if (eta_f < (eta_r + param*(one - eta_r))) then
       eta_f1 = one
-      eta_f0 = 1 - (1 - eta_f)/(1 - eta_r)
+      eta_f0 = one - (one - eta_f)/(one - eta_r)
     else
       eta_f1 = one + eta_f - eta_r + param*(one - eta_r)
       eta_f0 = param + eta_f - eta_r + param*(one - eta_r)
@@ -1002,9 +1003,9 @@
     
     ! interpolate along eta_r direction
     phis = phi0 + (phi1 - phi0)*                                               &
-                  (0.82_dp*eta_r**2)/(one - (one-0.82_dp)*eta_r**2)
-    bets = bet0 + (bet1 - bet0)*eta_r**2.0_dp
-    chis = chi0 + (chi1 - chi0)*eta_r**2.0_dp
+                  (0.82_dp*eta_r**two)/(one - (one-0.82_dp)*eta_r**two)
+    bets = bet0 + (bet1 - bet0)*eta_r**two
+    chis = chi0 + (chi1 - chi0)*eta_r*two
   
   end subroutine int_er_lt_one
 

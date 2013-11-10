@@ -1,0 +1,89 @@
+##############################
+# GAS PROPERTIES
+# ----------------------------
+RHO_REF      = 1.20493
+P_REF        = 101325.0
+T_REF        = 293.00
+MU_MODE      = POWERLAW
+MU_POWER_LAW = 0.0
+MU_REF       = 1.7265e-02                  
+
+##############################
+# RESTART FILE
+# ----------------------------
+RESTART = ../mixinglayer_185.cas
+#RESTART = ./restart.out    
+
+INIT_U    = 41.5541 0.0 0.0 
+INIT_TURB = 1.0609e-03 8.2266e+00
+
+##############################
+# SOLVER SETTINGS
+# ----------------------------
+CFL = 10.0                  
+CFL_RAMP AFTER_ITER=1000  INTERVAL_ITER=100  FACTOR_CFL=1.01  MAX_CFL=100.0 
+
+NSTEPS = 30000                
+CHECK_INTERVAL = 10           
+WRITE_RESTART = 30000        
+
+TIME_INTEGRATION = BACKWARD_EULER   
+UNDER_RELAXATION = 0.8
+
+LINEAR_SOLVER_NS = PETSC_GMRES
+LINEAR_SOLVER_NS_TRESHOLDS  MAX_ITER=30  ABS_RESID=1.0e-8  REL_RESID=1.0e-2
+LINEAR_SOLVER_SCALARS = PETSC_GMRES
+
+SPACE_INTEGRATION = HLLC
+SPATIAL_SECOND_ORDER         
+
+GRAD_RECONSTRUCTION  SCHEME=GREENGAUSS  LIMITER=YES  EPS=0.01
+
+##############################
+# BOUNDARY CONDITIONS
+# ----------------------------
+inlet_top-23 = CBC_SUBSONIC_INLET 0.0 0.0 0.0 293.86 102369.1
+inlet_bot-16 = CBC_SUBSONIC_INLET 0.0 0.0 0.0 293.25 101627.6
+
+outlet-7 = CBC_SUBSONIC_OUTLET 101325.0
+
+top-8  = SYMMETRY
+top-19 = SYMMETRY
+
+bot-4  = SYMMETRY
+bot-12 = SYMMETRY
+
+wall-9  = WALL
+wall-15 = WALL
+wall-21 = WALL
+
+sym_z1-6  = SYMMETRY
+sym_z1-14 = SYMMETRY
+sym_z1-22 = SYMMETRY
+
+sym_z2-5  = SYMMETRY
+sym_z2-13 = SYMMETRY
+sym_z2-20 = SYMMETRY
+
+inlet_top-23.kine = 1.0609e-03
+inlet_bot-16.kine = 3.0828e-04
+
+wall-9.kine  = 0.0
+wall-15.kine = 0.0
+wall-21.kine = 0.0
+
+inlet_top-23.omega = 8.2266e+00
+inlet_bot-16.omega = 2.3905e+00
+
+wall-9.omega  = HOOK
+wall-15.omega = HOOK
+wall-21.omega = HOOK
+
+##############################
+# RESULTS
+# ----------------------------
+WRITE_HISTORY
+
+WRITE_DATA FORMAT=TECPLOT NAME=full INTERVAL=5000 GEOM=ALL VARS= RHO vel press temp kine omega muT residField resid_kine resid_omega
+
+

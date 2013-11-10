@@ -1,4 +1,11 @@
 ##############################
+# Debugging Level:
+# ----------------------------
+#LOGGING_LEVEL = DEBUG_HI   # Shows all linear solver residuals
+#LOGGING_LEVEL = INFO_LO    # Shows part of the linear solver residuals
+LOGGING_LEVEL = INFO_HI        # Shows standard output 
+
+##############################
 # GAS PROPERTIES
 # ----------------------------
 RHO_REF      = 1.1295e+00
@@ -15,7 +22,7 @@ RESTART = ../flatplate_273x193.cas
 #RESTART = ./restart.out    
 
 INIT_U    = 6.9438e+01 0.0 0.0 
-INIT_TURB = 1.1001e-3 8.8013e+03
+INIT_TURB = 4.7058e-5
 
 ##############################
 # SOLVER SETTINGS
@@ -51,15 +58,10 @@ wall-7   = WALL
 botsym-4 = SYMMETRY 
 sym-6    = SYMMETRY
 
-inlet-5.kine  = 1.1001e-3 
-outlet-8.kine = 1.1001e-3
-top-9.kine    = 1.1001e-3
-wall-7.kine   = 0.0
-
-inlet-5.omega  = 8.8013e+03
-outlet-8.omega = 8.8013e+03
-top-9.omega    = 8.8013e+03
-wall-7.omega   = HOOK
+inlet-5.nuSA  = 4.7058e-5 
+outlet-8.nuSA = 4.7058e-5
+top-9.nuSA    = 4.7058e-5
+wall-7.nuSA   = 0.0
 
 ##############################
 # RESULTS
@@ -68,6 +70,6 @@ WRITE_HISTORY
 
 WRITE_ALLVALUES
 
-WRITE_DATA FORMAT=TECPLOT NAME=full INTERVAL=5000 GEOM=ALL VARS= RHO vel press temp kine omega muT residField resid_kine resid_omega rij_diag rij_offdiag
+WRITE_DATA FORMAT=TECPLOT NAME=full INTERVAL=5000 GEOM=ALL VARS= RHO vel press temp nuSA muT residField resid_kine resid_omega rij_diag rij_offdiag
 
 

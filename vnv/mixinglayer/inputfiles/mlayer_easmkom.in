@@ -1,4 +1,11 @@
 ##############################
+# Debugging Level:
+# ----------------------------
+#LOGGING_LEVEL = DEBUG_HI   # Shows all linear solver residuals
+#LOGGING_LEVEL = INFO_LO    # Shows part of the linear solver residuals
+LOGGING_LEVEL = INFO_HI        # Shows standard output 
+
+##############################
 # GAS PROPERTIES
 # ----------------------------
 RHO_REF      = 1.1295e+00
@@ -20,14 +27,14 @@ INIT_TURB = 1.1001e-3 8.8013e+03
 ##############################
 # SOLVER SETTINGS
 # ----------------------------
-CFL = 100.0                  
-CFL_RAMP AFTER_ITER=1000  INTERVAL_ITER=100  FACTOR_CFL=1.01  MAX_CFL=1000.0 
+CFL = 10.0                  
+CFL_RAMP AFTER_ITER=5000  INTERVAL_ITER=100  FACTOR_CFL=1.01  MAX_CFL=100.0 
 
-NSTEPS = 30000                
+NSTEPS = 50000                
 CHECK_INTERVAL = 10           
-WRITE_RESTART = 30000        
+WRITE_RESTART = 50000        
 
-TIME_INTEGRATION = BACKWARD_EULER   
+TIME_INTEGRATION = BACKWARD_EULER_COUPLED   
 
 #LINEAR_SOLVER_NS = BCGSTAB
 LINEAR_SOLVER_NS = PETSC_GMRES
@@ -61,6 +68,14 @@ outlet-8.omega = 8.8013e+03
 top-9.omega    = 8.8013e+03
 wall-7.omega   = HOOK
 
+###############################
+# PARAMETERS & CONSTANTS
+# -----------------------------
+EASM_TURB_SCALARS = 0
+
+#TRANSFORM_MESH
+SCL_MESH = 3.0
+
 ##############################
 # RESULTS
 # ----------------------------
@@ -68,6 +83,4 @@ WRITE_HISTORY
 
 WRITE_ALLVALUES
 
-WRITE_DATA FORMAT=TECPLOT NAME=full INTERVAL=5000 GEOM=ALL VARS= RHO vel press temp kine omega muT residField resid_kine resid_omega rij_diag rij_offdiag
-
-
+WRITE_DATA FORMAT=TECPLOT NAME=full INTERVAL=5000 GEOM=ALL VARS= RHO vel press temp kine omega cmus muT residField resid_kine resid_omega rij_diag rij_offdiag turbTS fbstar strMag debug1 debug2

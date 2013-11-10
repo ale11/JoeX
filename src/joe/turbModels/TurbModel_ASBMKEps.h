@@ -42,6 +42,7 @@ public:
     eq->upperBound = 1.0e10;
     eq->turbSchmidtNumber = SIG_D;
 
+    omega  = NULL;       registerScalar(omega,  "omega" , CV_DATA);
     v2     = NULL;       registerScalar(v2,     "v2"    , CV_DATA);
     strMag = NULL;       registerScalar(strMag, "strMag", CV_DATA);
     diverg = NULL;       registerScalar(diverg, "diverg", CV_DATA);
@@ -60,7 +61,7 @@ public:
 
 public:
 
-  double *eps, *v2;                                     ///< introduced to have access to variables, results into more readable code
+  double *eps, *omega, *v2;                             ///< introduced to have access to variables, results into more readable code
   double *kine_bfa, *eps_bfa;                           ///< turbulent scalars at the boundary
   double *muT;                                          ///< turbulent viscosity at cell center for output
 

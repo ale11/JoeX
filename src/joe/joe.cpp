@@ -3,7 +3,7 @@
 #include "turbModels/TurbModel_KOM.h"
 #include "turbModels/TurbModel_KEps.h"
 #include "turbModels/TurbModel_KOMSST.h"
-#include "turbModels/TurbModel_SST2003.h"
+#include "turbModels/TurbModel_SST.h"
 #include "turbModels/TurbModel_SA.h"
 #include "turbModels/TurbModel_V2F.h"
 #include "turbModels/TurbModel_EASM.h"
@@ -300,7 +300,7 @@ public:
 /*
  * MyJoe with Menter SST Model
  */
-class MyJoeSST : public MyJoe, public RansTurbKOmSST
+class MyJoeSST : public MyJoe, public RansTurbSST
 {
 public:
   MyJoeSST(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
@@ -360,16 +360,16 @@ public:
 /*
  * MyJoe with EASM model
  */
-class MyJoeEASM : public MyJoe, public RansTurbEASM
+class MyJoeEASMko : public MyJoe, public RansTurbEASMko
 {
 public:
-  MyJoeEASM(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
+  MyJoeEASMko(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
   {
     if (mpi_rank == 0)
-      cout << "MyJoeEASM()" << endl;
+      cout << "MyJoeEASMko()" << endl;
   }
 
-  virtual ~MyJoeEASM() {}
+  virtual ~MyJoeEASMko() {}
 };
 
 /*
@@ -1325,7 +1325,7 @@ int main(int argc, char *argv[])
     case 3:   joe = new MyJoeWX(inputFileName);         break;
     case 4:   joe = new MyJoeKEps(inputFileName);       break;
     case 5:   joe = new MyJoeV2F(inputFileName);        break;
-    case 6:   joe = new MyJoeEASM(inputFileName);       break;
+    case 6:   joe = new MyJoeEASMko(inputFileName);     break;
     case 7:   joe = new MyJoeASBM(inputFileName);       break;
     case 8:   joe = new BaryMaps(inputFileName);        break;
     case 9:   joe = new NonPerChan(inputFileName);      break;
