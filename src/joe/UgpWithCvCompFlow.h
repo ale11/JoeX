@@ -716,7 +716,7 @@ public:   // member variables
   double epsilonSDWLS;
   
   int turbModel;
-  enum TurbModel{NONE, SA, KEPS, KOM, KOMSST, SST, V2F, ASBM, EASMko, EASMke};
+  enum TurbModel{NONE, SA, KEPS, KOM, SST, V2F, GARET, ASBM, EASMkom, EASMkeps};
 
 
   // Approximate Riemann solver

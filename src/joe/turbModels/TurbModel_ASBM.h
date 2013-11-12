@@ -1,7 +1,7 @@
 #ifndef RANSTURBMODEL_ASBM_H
 #define RANSTURBMODEL_ASBM_H
 
-#include "TurbModel_KOMSST.h"
+#include "TurbModel_SST.h"
 #include "TurbModel_V2F.h"
 #include "TurbModel_KEps.h"
 #include "TurbModel_ASBMKEps.h"

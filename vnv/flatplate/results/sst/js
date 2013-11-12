@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#PBS -N Joe
+#PBS -e Joe.err
+#PBS -o Joe.out
+#PBS -l nodes=2:ppn=24
+#PBS -l walltime=20:00:00
+#PBS -V
+
+echo The master node of this job is `hostname`
+echo The working directory is `echo $PBS_O_WORKDIR`
+echo This job runs on the following nodes:
+echo `cat $PBS_NODEFILE`
+
+cd $PBS_O_WORKDIR
+cmd="mpiexec -npernode 12 ./joe 2 fplate_sst.in"
+$cmd >& $PBS_O_WORKDIR/output

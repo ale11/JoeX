@@ -296,15 +296,15 @@ public:
 // -for production of w, I divide by a limited k/w.
 // -the production of w (instead of just k) is also being limited.
 
-class RansTurbEASMko : virtual public RansTurbEASM
+class RansTurbEASMkom : virtual public RansTurbEASM
 {
 public:
-  RansTurbEASMko()
+  RansTurbEASMkom()
   {
     if (mpi_rank == 0)
-      cout << "RansTurbEASMko()" << endl;
+      cout << "RansTurbEASMkom()" << endl;
     
-    turbModel = EASMko;
+    turbModel = EASMkom;
 
     C_MU = getDoubleParam("C_MU", "0.0895");
     BETA = getDoubleParam("BETA", "0.83");
@@ -341,7 +341,7 @@ public:
     turbTS = NULL;       registerScalar(turbTS, "turbTS", CV_DATA);
   }
 
-  virtual ~RansTurbEASMko() {}
+  virtual ~RansTurbEASMkom() {}
 
 public:
 
@@ -596,15 +596,15 @@ public:
 // -the time scale, used for cmus and eps sources, has a Kolmogorov lower limit
 // -the production of w (instead of just k) is also being limited.
 
-class RansTurbEASMke : virtual public RansTurbEASM
+class RansTurbEASMkeps : virtual public RansTurbEASM
 {
 public:
-  RansTurbEASMke()
+  RansTurbEASMkeps()
   {
     if (mpi_rank == 0)
-      cout << "RansTurbEASMke()" << endl;
+      cout << "RansTurbEASMkeps()" << endl;
 
-    turbModel = EASMke;
+    turbModel = EASMkeps;
 
     C_MU  = getDoubleParam("C_MU", "0.0885");
     CEPS1 = getDoubleParam("CEPS1"  , "1.44");
@@ -642,7 +642,7 @@ public:
     wallConn = NULL;       // array of integers
   }
 
-  virtual ~RansTurbEASMke() {}
+  virtual ~RansTurbEASMkeps() {}
 
 public:
 

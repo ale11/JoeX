@@ -2,7 +2,6 @@
 
 #include "turbModels/TurbModel_KOM.h"
 #include "turbModels/TurbModel_KEps.h"
-#include "turbModels/TurbModel_KOMSST.h"
 #include "turbModels/TurbModel_SST.h"
 #include "turbModels/TurbModel_SA.h"
 #include "turbModels/TurbModel_V2F.h"
@@ -360,16 +359,16 @@ public:
 /*
  * MyJoe with EASM model
  */
-class MyJoeEASMko : public MyJoe, public RansTurbEASMko
+class MyJoeEASMkom : public MyJoe, public RansTurbEASMkom
 {
 public:
-  MyJoeEASMko(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
+  MyJoeEASMkom(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
   {
     if (mpi_rank == 0)
-      cout << "MyJoeEASMko()" << endl;
+      cout << "MyJoeEASMkom()" << endl;
   }
 
-  virtual ~MyJoeEASMko() {}
+  virtual ~MyJoeEASMkom() {}
 };
 
 /*
@@ -1325,7 +1324,7 @@ int main(int argc, char *argv[])
     case 3:   joe = new MyJoeWX(inputFileName);         break;
     case 4:   joe = new MyJoeKEps(inputFileName);       break;
     case 5:   joe = new MyJoeV2F(inputFileName);        break;
-    case 6:   joe = new MyJoeEASMko(inputFileName);     break;
+    case 6:   joe = new MyJoeEASMkom(inputFileName);    break;
     case 7:   joe = new MyJoeASBM(inputFileName);       break;
     case 8:   joe = new BaryMaps(inputFileName);        break;
     case 9:   joe = new NonPerChan(inputFileName);      break;

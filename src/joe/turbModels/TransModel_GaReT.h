@@ -1,7 +1,7 @@
 #ifndef RANSTRSANSMODEL_GARET
 #define RANSTRSANSMODEL_GARET
 
-#include "TurbModel_KOMSST.h"
+#include "TurbModel_SST.h"
 
 
 /*
@@ -19,7 +19,7 @@
 
 
 
-typedef RansTurbKOmSST TURB_MOD_FOR_TRANS; // define the turbulence model used with the transition model
+typedef RansTurbSST TURB_MOD_FOR_TRANS; // define the turbulence model used with the transition model
 
 
 
@@ -32,7 +32,7 @@ public:   // constructors
     if (mpi_rank == 0)
       cout << "RansTransGaReT()" << endl;
 
-    turbModel = KOMSST;
+    turbModel = GARET;
 
     ce1 = 1.0;
     ce2 = 50.0;
@@ -119,25 +119,6 @@ public:   // member functions
     }
   }
 
-  virtual void sourceHookScalarRansTurb(double *rhs, double *A, const string &name)
-  {
-    TURB_MOD_FOR_TRANS::sourceHookScalarRansTurb(rhs, A, name);
-
-    if (name == "gam")
-    {
-      if (mpi_rank == 0 )
-        cerr << " explicit gam source not coded yet!" << endl;
-      throw(-1);
-    }
-
-    if (name == "ReT")
-    {
-      if (mpi_rank == 0 )
-        cerr << " explicit gam source not coded yet!" << endl;
-      throw(-1);
-    }
-  }
-
   virtual void calcMenterBlendingFunctions()
   {
     calcCvScalarGrad(grad_kine,  kine,  kine_bfa,  gradreconstruction, limiterNavierS, kine,  epsilonSDWLS);
@@ -209,8 +190,7 @@ public:   // member functions
         double zeta = min(1.0/omega[icv], a1/(limiterFunc[icv]*blendFuncF2[icv]));
         double mut = min(max(rho[icv]*kine[icv]*zeta, 0.0), 1.0e5);
         double Pk = mut*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv];
-        if (SST_limitPK == 1)
-          Pk = min(Pk, 20.0*betaStar*rho[icv]*kine[icv]*omega[icv]);
+        Pk = min(Pk, 20.0*betaStar*rho[icv]*kine[icv]*omega[icv]);
 
         Pk = max(Pk, 0.0);  // for stabilization
         double src = gam_eff*Pk - faktDestr*betaStar*rho[icv]*omega[icv]*kine[icv];
@@ -228,7 +208,7 @@ public:   // member functions
       for (int icv=0; icv<ncv; icv++)
       {
         double F1 = blendFuncF1[icv];
-        double alfa = F1*alfa_1 + (1.0 - F1)*alfa_2;
+        double alfa = F1*gamma_1 + (1.0 - F1)*gamma_2;
         double beta = F1*beta_1 + (1.0 - F1)*beta_2;
 
         double zeta = max(omega[icv], limiterFunc[icv]*blendFuncF2[icv]/a1);

@@ -775,172 +775,6 @@
     cir(3,3) = trace_ststa
   end subroutine asbm
 
-!================================= LINSOLVER =================================80
-!
-! Double precision linear algebraic equation solver.
-! Solves a(i,j)*x(j) = b(i) i = 1,...,n
-! fround is a round-off test factor assuming at least 15 digit accuracy.
-! Uses Gaussian elimination with row normalization and selection.
-! On return:
-!   Solution ok:
-!     ierr = 0
-!     x is in b
-!     a is destroyed
-!   Singular matrix or bad dimensioning:
-!     ierr = 1
-!     a and b are destroyed
-!
-!=============================================================================80
-
-  subroutine linsolver(ndim,a,b,n,ierr)
-    implicit none
-    integer, parameter  :: dp = selected_real_kind(15, 307) !double precision
-
-    ! INITIAL DECLARATIONS
-    ! routine's inputs and outputs
-    integer, intent(in)                           :: ndim   !number of columns
-    integer, intent(in)                           :: n      !number of rows
-    integer, intent(inout)                        :: ierr   !error flag
-    real(dp), dimension(ndim,ndim), intent(inout) :: a      !matrix
-    real(dp), dimension(ndim), intent(inout)      :: b      !vector  
-    
-    ! constants
-    real(dp), parameter :: zero = 0.0_dp
-    real(dp), parameter :: one = 1.0_dp
-    real(dp), parameter :: fround = 1.0e-15_dp
-
-    ! variables
-    integer             :: i, j, k
-    integer             :: ix = 0.0_dp 
-    integer             :: nm1, m, mm1, im1
-    real(dp)            :: c, cx, d
-    real(dp)            :: termb, term
-
-    continue
-
-    if (n > ndim) then
-      ! dimensioning error: treat as program error in calls
-      ierr = 1
-      return
-    end if
-
-    ! form the lower triagonal system
-    if (n > 1) then
-      nm1 = n - 1
-      kloop: do k = 1,nm1
-        ! eliminate the last column in the upper M x M matrix
-        m = n - k + 1
-        mm1 = m - 1
-
-        ! normalize each row on its largest element
-        iloop1: do i = 1,m
-          c = zero         
-          do j = 1,m
-            cx = abs(a(i,j))
-            if (cx > c) c = cx
-          end do
-
-          ! check for singular matrix
-          if (c == zero) then
-            ierr = 1
-            return
-          end if
-
-          c = one/c
-          do j = 1,m
-            a(i,j) = a(i,j)*c
-          end do
-
-          b(i) = b(i)*c
-        end do iloop1
-
-        ! find the best row ix to eliminate in column M
-        c = zero
-        iloop2: do i = 1,m
-          cx = abs(a(i,m))
-          if (cx > c) then
-            c = cx
-            ix = i
-          end if
-        end do iloop2
-
-        ! check for singular matrix
-        if (c == zero) then
-          ierr = 1
-          return
-        end if
-
-        if (m /= ix) then
-          ! switch rows M and ix
-          c = b(m)
-          b(m) = b(ix)
-          b(ix) = c
-          do j = 1,m
-            c = a(m,j)
-            a(m,j) = a(ix,j)
-            a(ix,j) = c
-          end do
-        end if
-
-        ! eliminate last column using the lowest row in the M x M matrix
-        
-        ! check for singular matrix
-        if (a(m,m) == zero) then
-          ierr = 1
-          return
-        end if
-
-        ! column loop
-        iloop3: do i = 1,mm1
-          ! check for column entry
-          if (a(i,m) /= zero) then
-            ! eliminate
-            c = a(i,m)/a(m,m)
-            d = b(i) - c*b(m)
-            if (abs(d) < fround*abs(b(i))) d = zero
-            b(i) = d
-            do j = 1,mm1
-              d = a(i,j) - c*a(m,j)
-              if (abs(d) < fround*abs(a(i,j))) d = 0
-              a(i,j) = d
-            end do
-          end if
-        end do iloop3
-
-      end do kloop  
-    end if
-    
-    ! compute the back solution
-    
-    ! check for singular matrix
-    if (a(1,1) == zero) then
-      ierr = 1
-      return
-    end if
-
-    ! calculate x(1)
-    b(1) = b(1)/a(1,1)
-    if (n > 1) then
-      iloop4: do i = 2,n
-        ! calculate x(i)
-        im1 = i - 1
-        c = b(i)
-        termb = abs(c)
-        do j = 1,im1
-          term = a(i,j)*b(j)
-          c = c - term
-          if (abs(term) > termb) termb = abs(term)
-        end do
-      
-        if (abs(c) < fround*termb) c = zero
-        b(i) = c/a(i,i)
-      end do iloop4
-    end if
-
-    ! normal exit
-    ierr = 0
-  end subroutine linsolver
-
 !=============================== INT_ER_LT_ONE ===============================80
 !
 ! Computes the structure parameters for an arbitrary a_ij by interpolating 
@@ -993,8 +827,8 @@
       eta_f1 = one
       eta_f0 = one - (one - eta_f)/(one - eta_r)
     else
-      eta_f1 = one + eta_f - eta_r + param*(one - eta_r)
-      eta_f0 = param + eta_f - eta_r + param*(one - eta_r)
+      eta_f1 = one + eta_f - eta_r - param*(one - eta_r)
+      eta_f0 = param + eta_f - eta_r - param*(one - eta_r)
     end if
 
     ! compute parameters for shear and plane strain states
@@ -1089,9 +923,8 @@
       chi1 = fifth*bet1
     else if (eta_f < one) then
       phi1 = one - eta_f
-      chi1 = 0
-    !fifth + (one - fifth)*                                             &
-    !               (one - (one - eta_f)**2/(one + 3.0_dp*eta_f/oma))
+      chi1 = fifth + (one - fifth)*                                            &
+             (one - (one - eta_f)**2/(one + 3.0_dp*eta_f/oma))
       bet1 = one
     else
       phi1 = (eta_f - one)/(3.0_dp*eta_f - one)
@@ -1390,4 +1223,168 @@
     
   end subroutine structure
         
+!================================= LINSOLVER =================================80
+!
+! Double precision linear algebraic equation solver.
+! Solves a(i,j)*x(j) = b(i) i = 1,...,n
+! fround is a round-off test factor assuming at least 15 digit accuracy.
+! Uses Gaussian elimination with row normalization and selection.
+! On return:
+!   Solution ok:
+!     ierr = 0
+!     x is in b
+!     a is destroyed
+!   Singular matrix or bad dimensioning:
+!     ierr = 1
+!     a and b are destroyed
+!
+!=============================================================================80
+
+  subroutine linsolver(ndim,a,b,n,ierr)
+    implicit none
+    integer, parameter  :: dp = selected_real_kind(15, 307) !double precision
+
+    ! INITIAL DECLARATIONS
+    ! routine's inputs and outputs
+    integer, intent(in)                           :: ndim   !number of columns
+    integer, intent(in)                           :: n      !number of rows
+    integer, intent(inout)                        :: ierr   !error flag
+    real(dp), dimension(ndim,ndim), intent(inout) :: a      !matrix
+    real(dp), dimension(ndim), intent(inout)      :: b      !vector
     
+    ! constants
+    real(dp), parameter :: zero = 0.0_dp
+    real(dp), parameter :: one = 1.0_dp
+    real(dp), parameter :: fround = 1.0e-15_dp
+
+    ! variables
+    integer             :: i, j, k
+    integer             :: ix = 0.0_dp
+    integer             :: nm1, m, mm1, im1
+    real(dp)            :: c, cx, d
+    real(dp)            :: termb, term
+
+    continue
+
+    if (n > ndim) then
+      ! dimensioning error: treat as program error in calls
+      ierr = 1
+      return
+    end if
+
+    ! form the lower triagonal system
+    if (n > 1) then
+      nm1 = n - 1
+      kloop: do k = 1,nm1
+        ! eliminate the last column in the upper M x M matrix
+        m = n - k + 1
+        mm1 = m - 1
+
+        ! normalize each row on its largest element
+        iloop1: do i = 1,m
+          c = zero
+          do j = 1,m
+            cx = abs(a(i,j))
+            if (cx > c) c = cx
+          end do
+
+          ! check for singular matrix
+          if (c == zero) then
+            ierr = 1
+            return
+          end if
+
+          c = one/c
+          do j = 1,m
+            a(i,j) = a(i,j)*c
+          end do
+
+          b(i) = b(i)*c
+        end do iloop1
+
+        ! find the best row ix to eliminate in column M
+        c = zero
+        iloop2: do i = 1,m
+          cx = abs(a(i,m))
+          if (cx > c) then
+            c = cx
+            ix = i
+          end if
+        end do iloop2
+
+        ! check for singular matrix
+        if (c == zero) then
+          ierr = 1
+          return
+        end if
+
+        if (m /= ix) then
+          ! switch rows M and ix
+          c = b(m)
+          b(m) = b(ix)
+          b(ix) = c
+          do j = 1,m
+            c = a(m,j)
+            a(m,j) = a(ix,j)
+            a(ix,j) = c
+          end do
+        end if
+
+        ! eliminate last column using the lowest row in the M x M matrix
+
+        ! check for singular matrix
+        if (a(m,m) == zero) then
+          ierr = 1
+          return
+        end if
+
+        ! column loop
+        iloop3: do i = 1,mm1
+          ! check for column entry
+          if (a(i,m) /= zero) then
+            ! eliminate
+            c = a(i,m)/a(m,m)
+            d = b(i) - c*b(m)
+            if (abs(d) < fround*abs(b(i))) d = zero
+            b(i) = d
+            do j = 1,mm1
+              d = a(i,j) - c*a(m,j)
+              if (abs(d) < fround*abs(a(i,j))) d = 0
+              a(i,j) = d
+            end do
+          end if
+        end do iloop3
+
+      end do kloop
+    end if
+
+    ! compute the back solution
+
+    ! check for singular matrix
+    if (a(1,1) == zero) then
+      ierr = 1
+      return
+    end if
+
+    ! calculate x(1)
+    b(1) = b(1)/a(1,1)
+    if (n > 1) then
+      iloop4: do i = 2,n
+        ! calculate x(i)
+        im1 = i - 1
+        c = b(i)
+        termb = abs(c)
+        do j = 1,im1
+          term = a(i,j)*b(j)
+          c = c - term
+          if (abs(term) > termb) termb = abs(term)
+        end do
+
+        if (abs(c) < fround*termb) c = zero
+        b(i) = c/a(i,i)
+      end do iloop4
+    end if
+
+    ! normal exit
+    ierr = 0
+  end subroutine linsolver

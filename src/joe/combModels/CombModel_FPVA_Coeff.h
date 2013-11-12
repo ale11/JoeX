@@ -729,7 +729,7 @@ public:
   
   void ComputeScalarDissipation(double *chi)
   {
-    if ((turbModel == KOM) || (turbModel == KOMSST))
+    if ((turbModel == KOM) || (turbModel == SST))
     {
       double *om = getR1("omega");
       for (int icv = 0; icv < ncv; icv++)

@@ -143,7 +143,7 @@ public:
     eq = getScalarTransportData("ZVar");          ZVar  = eq->phi;           ZVar_Index  = getScalarTransportIndex("ZVar");
 
     // save indices for the turbulent variables (needed to compute chi)
-    if ((turbModel == KOM) || (turbModel == KOMSST))
+    if ((turbModel == KOM) || (turbModel == SST))
     {
       omega_Index = getScalarTransportIndex("omega");
       kine_Index  = getScalarTransportIndex("kine");
@@ -281,7 +281,7 @@ public:
     double chi;
     
     // Compute scalar dissipation rate
-    if ((turbModel == KOM) || (turbModel == KOMSST))
+    if ((turbModel == KOM) || (turbModel == SST))
       chi = Cchi * Cmu * Scal[omega_Index];
     else if (turbModel == KEPS)
       chi = Cchi * Scal[eps_Index] / Scal[kine_Index];
@@ -310,7 +310,7 @@ public:
     double chi;
     
     // Compute scalar dissipation rate
-    if ((turbModel == KOM) || (turbModel == KOMSST))
+    if ((turbModel == KOM) || (turbModel == SST))
       chi = Cchi * Cmu * Scal[omega_Index];
     else if (turbModel == KEPS)
       chi = Cchi * Scal[eps_Index] / Scal[kine_Index];
@@ -422,7 +422,7 @@ public:
   
   void ComputeScalarDissipation(double *chi)
   {
-    if ((turbModel == KOM) || (turbModel == KOMSST))
+    if ((turbModel == KOM) || (turbModel == SST))
     {
       double *om = getR1("omega");
       for (int icv = 0; icv < ncv; icv++)
@@ -466,7 +466,7 @@ public:
 
       else
       {            
-        if ((turbModel == KOM) || (turbModel == KOMSST))
+        if ((turbModel == KOM) || (turbModel == SST))
         {
           ScalarTranspEq *eq;
           eq = getScalarTransportData("omega");

@@ -108,7 +108,7 @@ public:
   virtual void initialHookScalarRansTurbModel()
   {
     if (mpi_rank == 0) 
-      cout << "initialHookScalarRansTurbModel() !!new SST model!!" << endl;
+      cout << "initialHookScalarRansTurbModel()" << endl;
 
     wallConn = new int[ncv];
     calcWallDistance(wallConn, wallDist);

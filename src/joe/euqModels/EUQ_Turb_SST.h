@@ -1,13 +1,13 @@
 #ifndef EUQ_TURB_SST_H
 #define EUQ_TURB_SST_H
 
-#include "turbModels/TurbModel_KOMSST.h"
+#include "turbModels/TurbModel_SST.h"
 
 #include "UgpWithCvCompFlow.h"
 #include "JoeWithModels.h"
 
 
-class EUQ_Turb_SST :virtual public JoeWithModels, virtual public RansTurbKOmSST
+class EUQ_Turb_SST :virtual public JoeWithModels, virtual public RansTurbSST
 {
 public:   // constructors
 
