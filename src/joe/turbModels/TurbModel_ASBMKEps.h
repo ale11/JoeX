@@ -86,40 +86,45 @@ public:
   {
     // compute wall-normal stress
     if(VEL_SCALE==0)
-    	for (int icv = 0; icv < ncv; icv++)  {
-      double fluc_norm = fabs(rij_diag[icv][1]);
-      v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
-    }
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double fluc_norm = fabs(rij_diag[icv][1]);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
 
     if(VEL_SCALE==1)
-    	for (int icv = 0; icv < ncv; icv++)  {
-      double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
-      double ny = vel[icv][1]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
-      double fluc_norm = fabs(rij_diag[icv][0]*ny-rij_diag[icv][1]*nx);
-      v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
-    }
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double ny = vel[icv][1]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double fluc_norm = fabs(rij_diag[icv][0]*ny-rij_diag[icv][1]*nx);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
 
     if(VEL_SCALE==11)
-    	for (int icv = 0; icv < ncv; icv++)  {
-      double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
-      double ny = vel[icv][1]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
-      double fluc_norm = fabs(rij_diag[icv][0]*ny*ny+rij_diag[icv][1]*nx*nx-2*nx*ny*rij_offdiag[icv][0]);
-      v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
-    }
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double ny = vel[icv][1]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double fluc_norm = fabs(rij_diag[icv][0]*ny*ny+rij_diag[icv][1]*nx*nx-2*nx*ny*rij_offdiag[icv][0]);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
 
     if(VEL_SCALE==2)
-    	for (int icv = 0; icv < ncv; icv++)  {
-      double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][2]*vel[icv][2]+1.e-12);
-      double nz = vel[icv][2]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][2]*vel[icv][2]+1.e-12);
-      double fluc_norm = fabs(rij_diag[icv][0]*nz-rij_diag[icv][2]*nx);
-      //double fluc_norm = fabs(rij_diag[icv][0]*nz*nz+rij_diag[icv][2]*nx*nx-2*nx*nz*rij_offdiag[icv][1]);
-      v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
-    }
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][2]*vel[icv][2]+1.e-12);
+        double nz = vel[icv][2]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][2]*vel[icv][2]+1.e-12);
+        double fluc_norm = fabs(rij_diag[icv][0]*nz-rij_diag[icv][2]*nx);
+        //double fluc_norm = fabs(rij_diag[icv][0]*nz*nz+rij_diag[icv][2]*nx*nx-2*nx*nz*rij_offdiag[icv][1]);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
 
     if(VEL_SCALE==3)
-    	for (int icv = 0; icv < ncv; icv++)  {
-      v2[icv] = 2./3.*kine[icv];
-    }
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        v2[icv] = 2./3.*kine[icv];
+      }
 
     updateCvData(v2, REPLACE_DATA);
 
@@ -316,6 +321,8 @@ public:
       }
 
       turbLS[icv] = LengthScale;
+      // *** alternate turbLS *** //
+      //turbLS[icv] = 0.1;
     }
     updateCvData(turbLS,REPLACE_DATA);
   }

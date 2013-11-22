@@ -13,11 +13,10 @@
 typedef RansTurbASBMKEps TURB_MOD_FOR_ASBM;
 
 extern "C"{
-  void asbm_(
+  void asbm1_(
       double*, double*, double*, double*, double*, double*,
       double*, double*, double*, int*, int*, int*);
-
-  void easm_(
+  void asbm2_(
       double*, double*, double*, double*, double*, double*,
       double*, double*, double*, int*, int*, int*);
 }
@@ -76,7 +75,6 @@ protected:   // member vars
   // General variables
   int      start_asbm;            // iteration number at which ASBM starts
   int      n_smooth;              // # of times to smooth data
-  int      easmflag;
 
   double   (*st_diag)[3];         // diagonal rate of strain tensor times tau
   double   (*st_offdiag)[3];      // off-diagonal rate of strain tensor times tau
@@ -128,7 +126,6 @@ public:   // member functions
     n_smooth   = getIntParam("N_SMOOTH", "0");
     block_frq  = getIntParam("BLOCK_FRQ","10");
     block_rij  = getIntParam("BLOCK_RIJ", "0");
-    easmflag   = getIntParam("EASM","0");
 
     if (!checkParam("LINEAR_SOLVER_BLOCK_TRESHOLDS"))
     {
@@ -328,11 +325,13 @@ public:   // member functions
       smoothingVec(wt_offdiag);
     }
 
+    //if (step == start_asbm)
+    //{
     // ====================================================================
     // Compute Reynolds stresses
     // ====================================================================
-    for (int icv = 0; icv < ncv; icv++){
-
+    for (int icv = 0; icv < ncv; icv++)
+    {
       // Anisotropic rate of strain tensor, sij = 0.5*(dui_dxj + duj_dxi) - 1/3*divg
       ST[0][0] = st_diag[icv][0];     ST[0][1] = st_offdiag[icv][0];     ST[0][2] = st_offdiag[icv][1];
       ST[1][0] = ST[0][1];            ST[1][1] = st_diag[icv][1];        ST[1][2] = st_offdiag[icv][2];
@@ -360,12 +359,78 @@ public:   // member functions
       // Call the ASBM
       ierr = 0;
 
-      if(easmflag==0)
-        asbm_(&(ST[0][0]), &(WT[0][0]), &(WFT[0][0]), &(BL[0][0]), &(AS[0][0]), &(AR[0][0]),
-              &(REY[0][0]), &(DIM[0][0]), &(CIR[0][0]), &maxitrs, &block_rij, &ierr);
-      else
-        easm_(&(ST[0][0]), &(WT[0][0]), &(WFT[0][0]), &(BL[0][0]), &(AS[0][0]), &(AR[0][0]),
-              &(REY[0][0]), &(DIM[0][0]), &(CIR[0][0]), &maxitrs, &block_rij, &ierr);
+      asbm1_(&(ST[0][0]), &(WT[0][0]), &(WFT[0][0]), &(BL[0][0]), &(AS[0][0]), &(AR[0][0]),
+            &(REY[0][0]), &(DIM[0][0]), &(CIR[0][0]), &maxitrs, &block_rij, &ierr);
+
+      if (ierr != 0)
+      {
+        myNerr ++;
+        cout << "ASBM error number " << ierr << " in cell " << icv << endl;
+        cout << "Cell-x: " << x_cv[icv][0]
+             << " Cell-y: " << x_cv[icv][1]
+             << " Cell-z: " << x_cv[icv][2] << endl;
+      }
+
+      as_diag[icv][0] = AS[0][0];       as_offdiag[icv][0] = AS[0][1];
+      as_diag[icv][1] = AS[1][1];       as_offdiag[icv][1] = AS[0][2];
+      as_diag[icv][2] = AS[2][2];       as_offdiag[icv][2] = AS[1][2];
+
+      ar_diag[icv][0] = AR[0][0];       ar_offdiag[icv][0] = AR[0][1];
+      ar_diag[icv][1] = AR[1][1];       ar_offdiag[icv][1] = AR[0][2];
+      ar_diag[icv][2] = AR[2][2];       ar_offdiag[icv][2] = AR[1][2];
+    }
+
+    updateCvData(as_diag, REPLACE_ROTATE_DATA);
+    updateCvData(as_offdiag, REPLACE_ROTATE_DATA);
+    updateCvData(ar_diag, REPLACE_ROTATE_DATA);
+    updateCvData(ar_offdiag, REPLACE_ROTATE_DATA);
+
+//    for (int i = 0; i < n_smooth; i++)
+//    {
+//      // Smooth inputs
+//      smoothingVec(as_diag);
+//      smoothingVec(as_offdiag);
+//      smoothingVec(ar_diag);
+//      smoothingVec(ar_offdiag);
+//
+//      updateCvData(as_diag, REPLACE_ROTATE_DATA);
+//      updateCvData(as_offdiag, REPLACE_ROTATE_DATA);
+//      updateCvData(ar_diag, REPLACE_ROTATE_DATA);
+//      updateCvData(ar_offdiag, REPLACE_ROTATE_DATA);
+//    }
+    //}
+
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      // Anisotropic rate of strain tensor, sij = 0.5*(dui_dxj + duj_dxi) - 1/3*divg
+      ST[0][0] = st_diag[icv][0];     ST[0][1] = st_offdiag[icv][0];     ST[0][2] = st_offdiag[icv][1];
+      ST[1][0] = ST[0][1];            ST[1][1] = st_diag[icv][1];        ST[1][2] = st_offdiag[icv][2];
+      ST[2][0] = ST[0][2];            ST[2][1] = ST[1][2];               ST[2][2] = st_diag[icv][2];
+
+      // Rate of mean rotation tensor, C TO FORTRAN, NEED TRANSPOSE: wij = -0.5*(dui_dxj - duj_dxi)
+      WT[0][0] = 0.0;                 WT[0][1] = -wt_offdiag[icv][0];    WT[0][2] = -wt_offdiag[icv][1];
+      WT[1][0] = -WT[0][1];           WT[1][1] = 0.0;                    WT[1][2] = -wt_offdiag[icv][2];
+      WT[2][0] = -WT[0][2];           WT[2][1] = -WT[1][2];              WT[2][2] = 0.0;
+
+      // Blockage tensor
+      BL[0][0] = block_diag[icv][0];  BL[0][1] = block_offdiag[icv][0];  BL[0][2] = block_offdiag[icv][1];
+      BL[1][0] = BL[0][1];            BL[1][1] = block_diag[icv][1];     BL[1][2] = block_offdiag[icv][2];
+      BL[2][0] = BL[0][2];            BL[2][1] = BL[1][2];               BL[2][2] = block_diag[icv][2];
+
+      // Strained and rotated A's
+      AS[0][0] = as_diag[icv][0];     AS[0][1] = as_offdiag[icv][0];     AS[0][2] = as_offdiag[icv][1];
+      AS[1][0] = AS[0][1];            AS[1][1] = as_diag[icv][1];        AS[1][2] = as_offdiag[icv][2];
+      AS[2][0] = AS[0][2];            AS[2][1] = AS[1][2];               AS[2][2] = as_diag[icv][2];
+
+      AR[0][0] = ar_diag[icv][0];     AR[0][1] = ar_offdiag[icv][0];     AR[0][2] = ar_offdiag[icv][1];
+      AR[1][0] = AR[0][1];            AR[1][1] = ar_diag[icv][1];        AR[1][2] = ar_offdiag[icv][2];
+      AR[2][0] = AR[0][2];            AR[2][1] = AR[1][2];               AR[2][2] = ar_diag[icv][2];
+
+      // Call the ASBM
+      ierr = 0;
+
+      asbm2_(&(ST[0][0]), &(WT[0][0]), &(WFT[0][0]), &(BL[0][0]), &(AS[0][0]), &(AR[0][0]),
+            &(REY[0][0]), &(DIM[0][0]), &(CIR[0][0]), &maxitrs, &block_rij, &ierr);
 
       if (ierr != 0)
       {
@@ -383,14 +448,6 @@ public:   // member functions
       rij_offdiag[icv][0] = -REY[0][1]*2*kine[icv]*rho[icv];
       rij_offdiag[icv][1] = -REY[0][2]*2*kine[icv]*rho[icv];
       rij_offdiag[icv][2] = -REY[1][2]*2*kine[icv]*rho[icv];
-
-      as_diag[icv][0] = AS[0][0];       as_offdiag[icv][0] = AS[0][1];
-      as_diag[icv][1] = AS[1][1];       as_offdiag[icv][1] = AS[0][2];
-      as_diag[icv][2] = AS[2][2];       as_offdiag[icv][2] = AS[1][2];
-
-      ar_diag[icv][0] = AR[0][0];       ar_offdiag[icv][0] = AR[0][1];
-      ar_diag[icv][1] = AR[1][1];       ar_offdiag[icv][1] = AR[0][2];
-      ar_diag[icv][2] = AR[2][2];       ar_offdiag[icv][2] = AR[1][2];
 
       scal_phi[icv] = CIR[0][0];
       scal_bet[icv] = CIR[1][0];
@@ -425,10 +482,6 @@ public:   // member functions
       dij_offdiag[icv][2] = DIM[1][2];
     }
 
-    updateCvData(as_diag, REPLACE_ROTATE_DATA);
-    updateCvData(as_offdiag, REPLACE_ROTATE_DATA);
-    updateCvData(ar_diag, REPLACE_ROTATE_DATA);
-    updateCvData(ar_offdiag, REPLACE_ROTATE_DATA);
     updateCvData(rij_diag, REPLACE_ROTATE_DATA);
     updateCvData(rij_offdiag, REPLACE_ROTATE_DATA);
 
@@ -458,17 +511,9 @@ public:   // member functions
     // Smooth Outputs
     for (int i = 0; i < n_smooth; i++)
     {
-      smoothingVec(as_diag);
-      smoothingVec(as_offdiag);
-      smoothingVec(ar_diag);
-      smoothingVec(ar_offdiag);
       smoothingVec(rij_diag);
       smoothingVec(rij_offdiag);
 
-      updateCvData(as_diag, REPLACE_ROTATE_DATA);
-      updateCvData(as_offdiag, REPLACE_ROTATE_DATA);
-      updateCvData(ar_diag, REPLACE_ROTATE_DATA);
-      updateCvData(ar_offdiag, REPLACE_ROTATE_DATA);
       updateCvData(rij_diag, REPLACE_ROTATE_DATA);
       updateCvData(rij_offdiag, REPLACE_ROTATE_DATA);
     }
