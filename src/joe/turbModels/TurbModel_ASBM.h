@@ -1,16 +1,7 @@
 #ifndef RANSTURBMODEL_ASBM_H
 #define RANSTURBMODEL_ASBM_H
 
-#include "TurbModel_SST.h"
-#include "TurbModel_V2F.h"
-#include "TurbModel_KEps.h"
-#include "TurbModel_ASBMKEps.h"
-
-// define the turbulence model used with the ASBM
-//typedef RansTurbKOmSST TURB_MOD_FOR_ASBM;
-//typedef RansTurbV2F TURB_MOD_FOR_ASBM;
-//typedef RansTurbKEps TURB_MOD_FOR_ASBM;
-typedef RansTurbASBMKEps TURB_MOD_FOR_ASBM;
+#include "UgpWithCvCompFlow.h"
 
 extern "C"{
   void asbm1_(
@@ -21,17 +12,12 @@ extern "C"{
       double*, double*, double*, int*, int*, int*);
 }
 
-class RansTurbASBM : virtual public TURB_MOD_FOR_ASBM
+class RansTurbASBM : virtual public UgpWithCvCompFlow
 {
-public:   // constructors
+public: // constructor, destructor
 
   RansTurbASBM()
   {
-    if (mpi_rank == 0)
-      cout << "RansTurbASBM()" << endl;
-
-    turbModel = ASBM;
-
     // General variables
     st_diag       = NULL;     registerVector(st_diag,       "st_diag",       CV_DATA);
     st_offdiag    = NULL;     registerVector(st_offdiag,    "st_offdiag",    CV_DATA);
@@ -50,7 +36,14 @@ public:   // constructors
     scal_bet      = NULL;     registerScalar(scal_bet,      "scal_bet",      CV_DATA);
     scal_chi      = NULL;     registerScalar(scal_chi,      "scal_chi",      CV_DATA);
 
-    // For debugging only
+    // Blocking variables
+    block_diag    = NULL;     registerVector(block_diag,    "block_diag",    CV_DATA);
+    block_offdiag = NULL;     registerVector(block_offdiag, "block_offdiag", CV_DATA);
+    bphi          = NULL;     registerScalar(bphi,          "bphi",          CV_DATA);
+    bphi_bfa      = NULL;     // this is a face array
+    grad_bphi     = NULL;     // this array includes ghost cells
+
+    // Debugging variables
     hatwt         = NULL;     registerScalar(hatwt,         "hatwt",         CV_DATA);
     hatst         = NULL;     registerScalar(hatst,         "hatst",         CV_DATA);
     ststa         = NULL;     registerScalar(ststa,         "ststa",         CV_DATA);
@@ -59,22 +52,14 @@ public:   // constructors
     rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
     dij_diag      = NULL;     registerVector(dij_diag,       "dij_diag",     CV_DATA);
     dij_offdiag   = NULL;     registerVector(dij_offdiag,    "dij_offdiag",  CV_DATA);
-
-    // Blocking variables
-    block_diag    = NULL;     registerVector(block_diag,    "block_diag",    CV_DATA);
-    block_offdiag = NULL;     registerVector(block_offdiag, "block_offdiag", CV_DATA);
-    bphi          = NULL;     registerScalar(bphi,          "bphi",          CV_DATA);
-    bphi_bfa      = NULL;     // this is a face array
-    grad_bphi     = NULL;     // this array includes ghost cells
   }
 
   virtual ~RansTurbASBM() {}
 
-protected:   // member vars
+protected: // member variables
 
   // General variables
-  int      start_asbm;            // iteration number at which ASBM starts
-  int      n_smooth;              // # of times to smooth data
+  int n_smooth;                   // # of times to smooth data
 
   double   (*st_diag)[3];         // diagonal rate of strain tensor times tau
   double   (*st_offdiag)[3];      // off-diagonal rate of strain tensor times tau
@@ -87,15 +72,6 @@ protected:   // member vars
 
   double   *etar, *etaf, *a2;
   double   *scal_phi, *scal_bet, *scal_chi;
-
-  // For debugging only
-  int      *marker;
-  double   *hatwt, *hatst, *ststa;
-
-  double (*rij_diag_nd)[3];
-  double (*rij_offdiag_nd)[3];
-  double (*dij_diag)[3];
-  double (*dij_offdiag)[3];
 
   // Blocking variables
   double   (*block_diag)[3];      // diagonal blockage tensor
@@ -113,16 +89,19 @@ protected:   // member vars
   // I/O variables
   FILE *finfo;              // output file for ASBM quantities
 
+  // Debugging variables
+  int      *marker;
+  double   *hatwt, *hatst, *ststa;
+
+  double (*rij_diag_nd)[3];
+  double (*rij_offdiag_nd)[3];
+  double (*dij_diag)[3];
+  double (*dij_offdiag)[3];
+
 public:   // member functions
 
   virtual void initialHookScalarRansTurbModel()
   {
-    TURB_MOD_FOR_ASBM::initialHookScalarRansTurbModel();
-
-    if (mpi_rank == 0)
-      cout << "initialHookScalarRansTurbModel()" << endl;
-
-    start_asbm = getIntParam("START_ASBM", "0");
     n_smooth   = getIntParam("N_SMOOTH", "0");
     block_frq  = getIntParam("BLOCK_FRQ","10");
     block_rij  = getIntParam("BLOCK_RIJ", "0");
@@ -149,32 +128,6 @@ public:   // member functions
       }
       else
         cout << "Opened file asbmInfo.dat" << endl;
-
-      cout << "ASBM properties" << endl;
-      switch(LIMIT_PK)
-      {
-      case 0: cout << "    PK limiter: no" << endl; break;
-      case 1: cout << "    PK limiter: yes" << endl; break;
-      }
-      switch(RIJ_BASED_PK)
-      {
-      case 0: cout << "    PK based on ASBM stresses: no" << endl; break;
-      case 1: cout << "    Pk based on ASBM stresses: yes" << endl; break;
-      }
-      switch(VEL_SCALE)
-      {
-      case 0:  cout<<"    Velocity scale = VY          "<<endl; break;
-      case 1:  cout<<"    Velocity scale = VNXY        "<<endl; break;
-      case 11: cout<<"    Velocity scale = VNXYXY      "<<endl; break;
-      case 2:  cout<<"    Velocity scale = VNXZ        "<<endl; break;
-      case 3:  cout<<"    Velocity scale = 0.66 TKE    "<<endl; break;
-      default: cout<<"    Velocity scale = v2 from v2f "<<endl; break;
-      }
-      switch(block_rij)
-      {
-      case 0: cout <<"    Blocking rij: no" << endl; break;
-      case 1: cout <<"    Blocking rij: yes" << endl; break;
-      }
     }
 
     // Initialize cell centered data
@@ -225,47 +178,6 @@ public:   // member functions
     calcCvScalarGrad(grad_bphi, bphi, bphi_bfa, gradreconstruction, limiterNavierS, bphi, epsilonSDWLS);
   }
 
-  virtual void calcRansTurbViscMuet()
-  {
-//    if (step == start_asbm){
-//      for (int icv = 0; icv < ncv; icv++)
-//        eps[icv] = 0.09*kine[icv]*omega[icv];
-//      updateCvData(eps, REPLACE_DATA);
-//    }
-
-    calcGradVel();
-    calcStrainRateAndDivergence();
-    calcTurbTimeScale();
-    calcTurbLengthScale();
-    //if (step == start_asbm) calcTurbLengthScale();
-
-    // Non-linear domain partitioning
-    if (step == start_asbm) setNonLinearDomain();
-//    if (step == start_asbm)
-//      for (int ifa = 0; ifa < nfa; ifa++)
-//        nonLinear[ifa] = 0.1;
-//
-//    if ((step > start_asbm) && (step%100 == 0))
-//      for (int ifa = 0; ifa < nfa; ifa++)
-//        nonLinear[ifa] = min(nonLinear[ifa]*1.01, 1.0);
-
-    // Computation of ASBM variables
-    if (step >= start_asbm){
-      if ( step%block_frq == 0 ) calcBlockTensor();
-      calcRsCenterASBM();
-    }
-
-    TURB_MOD_FOR_ASBM::calcRansTurbViscMuet();
-  }
-
-  virtual void setNonLinearDomain(){
-    // default
-    if (mpi_rank == 0)
-      cout << "NON-LINEAR DOMAIN SET AS DEFAULT." << endl;
-    for (int ifa = 0; ifa < nfa; ifa++)
-      nonLinear[ifa] = 1.0;
-  }
-
   void calcRsCenterASBM(){
     // ====================================================================
     //        variable declaration and initialization
@@ -295,22 +207,22 @@ public:   // member functions
     // ====================================================================
     // compute inputs
     // ====================================================================
-    double divg, tau;
-    for (int icv = 0; icv < ncv; icv++){
-        divg = grad_u[icv][0][0] + grad_u[icv][1][1] + grad_u[icv][2][2];
-        tau  = turbTS[icv];
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double div = diverg[icv];
+      double tau = turbTS[icv];
 
-        st_diag[icv][0] = (grad_u[icv][0][0] - 1.0/3.0*divg)*tau;
-        st_diag[icv][1] = (grad_u[icv][1][1] - 1.0/3.0*divg)*tau;
-        st_diag[icv][2] = (grad_u[icv][2][2] - 1.0/3.0*divg)*tau;
+      st_diag[icv][0] = (grad_u[icv][0][0] - 1.0/3.0*div)*tau;
+      st_diag[icv][1] = (grad_u[icv][1][1] - 1.0/3.0*div)*tau;
+      st_diag[icv][2] = (grad_u[icv][2][2] - 1.0/3.0*div)*tau;
 
-        st_offdiag[icv][0] = 0.5*(grad_u[icv][0][1] + grad_u[icv][1][0])*tau;
-        st_offdiag[icv][1] = 0.5*(grad_u[icv][0][2] + grad_u[icv][2][0])*tau;
-        st_offdiag[icv][2] = 0.5*(grad_u[icv][1][2] + grad_u[icv][2][1])*tau;
+      st_offdiag[icv][0] = 0.5*(grad_u[icv][0][1] + grad_u[icv][1][0])*tau;
+      st_offdiag[icv][1] = 0.5*(grad_u[icv][0][2] + grad_u[icv][2][0])*tau;
+      st_offdiag[icv][2] = 0.5*(grad_u[icv][1][2] + grad_u[icv][2][1])*tau;
 
-        wt_offdiag[icv][0] = 0.5*(grad_u[icv][0][1] - grad_u[icv][1][0])*tau;
-        wt_offdiag[icv][1] = 0.5*(grad_u[icv][0][2] - grad_u[icv][2][0])*tau;
-        wt_offdiag[icv][2] = 0.5*(grad_u[icv][1][2] - grad_u[icv][2][1])*tau;
+      wt_offdiag[icv][0] = 0.5*(grad_u[icv][0][1] - grad_u[icv][1][0])*tau;
+      wt_offdiag[icv][1] = 0.5*(grad_u[icv][0][2] - grad_u[icv][2][0])*tau;
+      wt_offdiag[icv][2] = 0.5*(grad_u[icv][1][2] - grad_u[icv][2][1])*tau;
     }
 
     for (int i = 0; i < n_smooth; i++)
@@ -485,6 +397,19 @@ public:   // member functions
     updateCvData(rij_diag, REPLACE_ROTATE_DATA);
     updateCvData(rij_offdiag, REPLACE_ROTATE_DATA);
 
+    // Smooth Outputs
+    for (int i = 0; i < n_smooth; i++)
+    {
+      smoothingVec(rij_diag);
+      smoothingVec(rij_offdiag);
+
+      updateCvData(rij_diag, REPLACE_ROTATE_DATA);
+      updateCvData(rij_offdiag, REPLACE_ROTATE_DATA);
+    }
+
+    // Interpolate cell centered stresses to cell faces
+    interpolateReStressToFace();
+
     // Write nan's to screen
     MPI_Barrier(mpi_comm);
     if (mpi_rank != 0)
@@ -507,19 +432,6 @@ public:   // member functions
       MPI_Send(&dummy,1,MPI_INT,mpi_rank+1,1234,mpi_comm);
     }
     MPI_Barrier(mpi_comm);
-
-    // Smooth Outputs
-    for (int i = 0; i < n_smooth; i++)
-    {
-      smoothingVec(rij_diag);
-      smoothingVec(rij_offdiag);
-
-      updateCvData(rij_diag, REPLACE_ROTATE_DATA);
-      updateCvData(rij_offdiag, REPLACE_ROTATE_DATA);
-    }
-
-    // Interpolate cell centered stresses to cell faces
-    interpolateStressToFace();
 
     // ====================================================================
     // Output error file
@@ -845,162 +757,426 @@ public:   // member functions
     cout << "str : " << strMag[icv] << endl << endl;
   }
 
-  virtual void interpolateStressToFace()
-  {
-    // ====================================================================
-    // Compute internal face Reynolds stresses
-    // ====================================================================
-    for (int ifa = nfa_b; ifa < nfa; ifa++)
-    {
-      int icv0 = cvofa[ifa][0];
-      int icv1 = cvofa[ifa][1];
-      assert( icv0 >= 0 );
-      assert( icv1 >= 0 );
-
-      double dx0[3], dx1[3];
-      vecMinVec3d(dx0, x_fa[ifa], x_cv[icv0]);
-      vecMinVec3d(dx1, x_fa[ifa], x_cv[icv1]);
-      double w0 = sqrt(vecDotVec3d(dx0, dx0));
-      double w1 = sqrt(vecDotVec3d(dx1, dx1));
-
-      // Update Reynolds stresses
-      rij_diag_fa[ifa][0] = (w1*rij_diag[icv0][0] + w0*rij_diag[icv1][0])/(w0 + w1);
-      rij_diag_fa[ifa][1] = (w1*rij_diag[icv0][1] + w0*rij_diag[icv1][1])/(w0 + w1);
-      rij_diag_fa[ifa][2] = (w1*rij_diag[icv0][2] + w0*rij_diag[icv1][2])/(w0 + w1);
-
-      rij_offdiag_fa[ifa][0] = (w1*rij_offdiag[icv0][0] + w0*rij_offdiag[icv1][0])/(w0 + w1);
-      rij_offdiag_fa[ifa][1] = (w1*rij_offdiag[icv0][1] + w0*rij_offdiag[icv1][1])/(w0 + w1);
-      rij_offdiag_fa[ifa][2] = (w1*rij_offdiag[icv0][2] + w0*rij_offdiag[icv1][2])/(w0 + w1);
-    }
-
-    // ====================================================================
-    // Compute boundary face Reynolds stresses
-    // ====================================================================
-    for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
-    {
-      if (zone->getKind() == FA_ZONE_BOUNDARY)
-      {
-        Param *param;
-        if (getParam(param, zone->getName()))
-        {
-          // .............................................................................................
-          // SYMMETRY BOUNDARY CONDITION
-          // .............................................................................................
-          if (param->getString() == "SYMMETRY")
-          {
-            // No viscous flux in this case (or yes!)
-            double nVec[3], pVec[3], qVec[3];
-            double mag;
-            double unitMat[3][3], rijMat[3][3], rijbarMat[3][3];
-
-            for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
-            {
-              int icv0 = cvofa[ifa][0];
-              assert( icv0 >= 0 );
-
-              // define Reynolds stresses
-              rij_diag_fa[ifa][0] = rij_diag[icv0][0];
-              rij_diag_fa[ifa][1] = rij_diag[icv0][1];
-              rij_diag_fa[ifa][2] = rij_diag[icv0][2];
-
-              rij_offdiag_fa[ifa][0] = rij_offdiag[icv0][0];
-              rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
-              rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
-
-              rijMat[0][0] = rij_diag[icv0][0];
-              rijMat[0][1] = rij_offdiag[icv0][0];
-              rijMat[0][2] = rij_offdiag[icv0][1];
-
-              rijMat[1][0] = rijMat[0][1];
-              rijMat[1][1] = rij_diag[icv0][1];
-              rijMat[1][2] = rij_offdiag[icv0][2];
-
-              rijMat[2][0] = rijMat[0][2];
-              rijMat[2][1] = rijMat[1][2];
-              rijMat[2][2] = rij_diag[icv0][2];
-
-              // compute new coordinate system
-              mag = normVec3d(nVec, fa_normal[ifa]);
-
-              int nof_f = noofa_i[ifa];
-              int nof_l = noofa_i[ifa+1]-1;
-              vecMinVec3d(pVec, x_no[noofa_v[nof_f]], x_no[noofa_v[nof_l]]);
-              mag = normVec3d(pVec);
-
-              qVec[0] = nVec[1] * pVec[2] - nVec[2] * pVec[1];
-              qVec[1] = nVec[2] * pVec[0] - nVec[0] * pVec[2];
-              qVec[1] = nVec[0] * pVec[1] - nVec[1] * pVec[0];
-
-              // transform Reynolds stresses
-              unitMat[0][0] = nVec[0];   unitMat[0][1] = nVec[1];   unitMat[0][2] = nVec[2];
-              unitMat[1][0] = pVec[0];   unitMat[1][1] = pVec[1];   unitMat[1][2] = pVec[2];
-              unitMat[2][0] = qVec[0];   unitMat[2][1] = qVec[1];   unitMat[2][2] = qVec[2];
-
-              similMatR3(rijbarMat, unitMat, rijMat);
-
-              // shear stresses are zero
-              rijbarMat[0][1] = 0.0;
-              rijbarMat[1][0] = 0.0;
-              rijbarMat[0][2] = 0.0;
-              rijbarMat[2][0] = 0.0;
-
-              // transform Reynolds stresses back to original coordinate system
-              transMatR3(unitMat);
-              similMatR3(rijMat, unitMat, rijbarMat);
-            }
-          }
-          // .............................................................................................
-          // WALL BOUNDARY CONDITION
-          // .............................................................................................
-          else if (param->getString() == "WALL")
-          {
-            for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
-            {
-              rij_diag_fa[ifa][0] = 0.0;
-              rij_diag_fa[ifa][1] = 0.0;
-              rij_diag_fa[ifa][2] = 0.0;
-
-              rij_offdiag_fa[ifa][0] = 0.0;
-              rij_offdiag_fa[ifa][1] = 0.0;
-              rij_offdiag_fa[ifa][2] = 0.0;
-            }
-          }
-          // .............................................................................................
-          // OTHER BOUNDARY CONDITIONS
-          // .............................................................................................
-          else
-          {
-            for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
-            {
-              int icv0 = cvofa[ifa][0];
-              assert( icv0 >= 0 );
-
-              // define Reynolds stresses
-              rij_diag_fa[ifa][0] = rij_diag[icv0][0];
-              rij_diag_fa[ifa][1] = rij_diag[icv0][1];
-              rij_diag_fa[ifa][2] = rij_diag[icv0][2];
-
-              rij_offdiag_fa[ifa][0] = rij_offdiag[icv0][0];
-              rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
-              rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
-            }
-          }
-        }
-      }
-    }
-  }
-
   virtual void finalHookScalarRansTurbModel()
   {
     if (marker    != NULL) {delete [] marker;       marker    = NULL;}
     if (bphi_bfa  != NULL) {delete [] bphi_bfa;     bphi_bfa  = NULL;}
     if (grad_bphi != NULL) {delete [] grad_bphi;    grad_bphi = NULL;}
     if (mpi_rank == 0) fclose(finfo);
-
-    TURB_MOD_FOR_ASBM::finalHookScalarRansTurbModel();
   }
 };
 
 
+/*
+ * ASBM with keps Model
+ */
+
+class RansTurbASBMkeps : virtual public RansTurbASBM
+{
+public:
+  RansTurbASBMkeps()
+  {
+    if (mpi_rank == 0)
+      cout << "RansTurbASBMkeps()" << endl;
+
+    turbModel = ASBMkeps;
+
+    C_MU  = getDoubleParam("C_MU",  "0.22");
+    SIG_K = getDoubleParam("SIG_K", "1.0");
+    SIG_D = getDoubleParam("SIG_D", "1.3");
+    CEPS1 = getDoubleParam("CEPS1", "1.4");
+    CEPS2 = getDoubleParam("CEPS2", "1.9");
+    CETA  = getDoubleParam("CETA",  "70.0");
+    CL    = getDoubleParam("CL",    "0.23");
+
+    LIMIT_PK     = getIntParam("LIMIT_PK",     "0");
+    VEL_SCALE    = getIntParam("VEL_SCALE",    "0");
+    RIJ_BASED_PK = getIntParam("RIJ_BASED_PK", "0");
+
+    ScalarTranspEq *eq;
+    eq = registerScalarTransport("kine",  CV_DATA);
+    eq->relax = getDoubleParam("RELAX_kine", "0.7");
+    eq->phiZero = 1.0e-10;
+    eq->phiMaxiter = 500;
+    eq->lowerBound = 1.0e-10;
+    eq->upperBound = 1.0e10;
+    eq->turbSchmidtNumber = SIG_K;
+
+    eq = registerScalarTransport("eps", CV_DATA);
+    eq->relax = getDoubleParam("RELAX_eps", "0.7");
+    eq->phiZero = 1.0e-8;
+    eq->phiMaxiter = 500;
+    eq->lowerBound = 1.0e-4;
+    eq->upperBound = 1.0e10;
+    eq->turbSchmidtNumber = SIG_D;
+
+    omega  = NULL;       registerScalar(omega,  "omega" , CV_DATA);
+    v2     = NULL;       registerScalar(v2,     "v2"    , CV_DATA);
+    strMag = NULL;       registerScalar(strMag, "strMag", CV_DATA);
+    diverg = NULL;       registerScalar(diverg, "diverg", CV_DATA);
+    turbTS = NULL;       registerScalar(turbTS, "turbTS", CV_DATA);
+    turbLS = NULL;       registerScalar(turbLS, "turbLS", CV_DATA);
+    muT    = NULL;       registerScalar(muT,    "muT",    CV_DATA);
+    tturb  = NULL;       registerScalar(tturb, "tturb", CV_DATA);
+    tkol   = NULL;       registerScalar(tkol, "tkol", CV_DATA);
+    trel   = NULL;       registerScalar(trel, "trel", CV_DATA);
+    lturb  = NULL;       registerScalar(lturb, "lturb", CV_DATA);
+    lkol   = NULL;       registerScalar(lkol, "lkol", CV_DATA);
+    lrel   = NULL;       registerScalar(lrel, "lrel", CV_DATA);
+  }
+
+  virtual ~RansTurbASBMkeps() {}
+
+public:
+
+  double *eps, *omega, *v2;                             ///< introduced to have access to variables, results into more readable code
+  double *kine_bfa, *eps_bfa;                           ///< turbulent scalars at the boundary
+  double *muT;                                          ///< turbulent viscosity at cell center for output
+
+  double C_MU, SIG_K, SIG_D, CEPS1, CEPS2, CETA, CL; ///< model constants
+
+  double *tturb, *tkol, *trel, *lkol, *lrel, *lturb;
+
+  int LIMIT_PK, VEL_SCALE, RIJ_BASED_PK;
+
+public:
+  virtual void initialHookScalarRansTurbModel()
+  {
+    if (mpi_rank == 0)
+      cout << "initialHook() for ASBMkeps" << endl;
+
+    ScalarTranspEq *eq;
+    eq = getScalarTransportData("kine");     kine = eq->phi;      kine_bfa = eq->phi_bfa;
+    eq = getScalarTransportData("eps");      eps = eq->phi;       eps_bfa = eq->phi_bfa;
+
+    for (int ifa = 0; ifa < nfa; ifa++)
+      nonLinear[ifa] = 1.0;
+    if (mpi_rank == 0)
+      cout << "NON-LINEAR DOMAIN ACTIVATED." << endl;
+
+    RansTurbASBM::initialHookScalarRansTurbModel();
+
+    // Output to screen
+    if (mpi_rank == 0)
+    {
+      cout << "ASBM properties" << endl;
+      switch(LIMIT_PK)
+      {
+      case 0: cout << "    PK limiter: no" << endl; break;
+      case 1: cout << "    PK limiter: yes" << endl; break;
+      }
+      switch(RIJ_BASED_PK)
+      {
+      case 0: cout << "    PK based on ASBM stresses: no" << endl; break;
+      case 1: cout << "    Pk based on ASBM stresses: yes" << endl; break;
+      }
+      switch(VEL_SCALE)
+      {
+      case 0:  cout<<"    Velocity scale = VY          "<<endl; break;
+      case 1:  cout<<"    Velocity scale = VNXY        "<<endl; break;
+      case 11: cout<<"    Velocity scale = VNXYXY      "<<endl; break;
+      case 2:  cout<<"    Velocity scale = VNXZ        "<<endl; break;
+      case 3:  cout<<"    Velocity scale = 0.66 TKE    "<<endl; break;
+      default: cout<<"    Velocity scale = v2 from v2f "<<endl; break;
+      }
+      switch(block_rij)
+      {
+      case 0: cout <<"    Blocking rij: no" << endl; break;
+      case 1: cout <<"    Blocking rij: yes" << endl; break;
+      }
+    }
+  }
+
+  virtual void calcRansTurbViscMuet()
+  {
+    //    if (step == start_asbm){
+    //      for (int icv = 0; icv < ncv; icv++)
+    //        eps[icv] = 0.09*kine[icv]*omega[icv];
+    //      updateCvData(eps, REPLACE_DATA);
+    //    }
+
+    // update velocity gradients, timescale, lengthscale
+    calcGradVel();
+    calcStrainRateAndDivergence();
+    calcTurbTimeScale();
+    calcTurbLengthScale();
+
+    // compute Reynolds stresses
+    if ( step%block_frq == 0 )
+      calcBlockTensor();
+    calcRsCenterASBM();
+
+    // compute wall-normal stress
+    if(VEL_SCALE==0)
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double fluc_norm = fabs(rij_diag[icv][1]);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
+
+    if(VEL_SCALE==1)
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double ny = vel[icv][1]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double fluc_norm = fabs(rij_diag[icv][0]*ny-rij_diag[icv][1]*nx);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
+
+    if(VEL_SCALE==11)
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double ny = vel[icv][1]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
+        double fluc_norm = fabs(rij_diag[icv][0]*ny*ny+rij_diag[icv][1]*nx*nx-2*nx*ny*rij_offdiag[icv][0]);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
+
+    if(VEL_SCALE==2)
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][2]*vel[icv][2]+1.e-12);
+        double nz = vel[icv][2]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][2]*vel[icv][2]+1.e-12);
+        double fluc_norm = fabs(rij_diag[icv][0]*nz-rij_diag[icv][2]*nx);
+        //double fluc_norm = fabs(rij_diag[icv][0]*nz*nz+rij_diag[icv][2]*nx*nx-2*nx*nz*rij_offdiag[icv][1]);
+        v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
+      }
+
+    if(VEL_SCALE==3)
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        v2[icv] = 2./3.*kine[icv];
+      }
+
+    updateCvData(v2, REPLACE_DATA);
+
+    //--------------------------------
+    // calculate turbulent viscosity
+    for (int ifa = nfa_b; ifa < nfa; ifa++)
+    {
+      int icv0 = cvofa[ifa][0];
+      int icv1 = cvofa[ifa][1];
+
+      double dx0[3], dx1[3];
+      vecMinVec3d(dx0, x_fa[ifa], x_cv[icv0]);
+      vecMinVec3d(dx1, x_fa[ifa], x_cv[icv1]);
+      double w0 = sqrt(vecDotVec3d(dx0, dx0));
+      double w1 = sqrt(vecDotVec3d(dx1, dx1));
+      double invwtot = 1.0/(w0+w1);
+
+      double rho_fa    = (w1*rho[icv0] + w0*rho[icv1])*invwtot;
+      double turbTS_fa = (w1*turbTS[icv0] + w0*turbTS[icv1])*invwtot;
+      double v2_fa     = (w1*v2[icv0] + w0*v2[icv1])*invwtot;
+
+      mut_fa[ifa] = min(max(C_MU*rho_fa*v2_fa*turbTS_fa, 0.0), 1.0);
+    }
+
+    for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
+    {
+      if (zone->getKind() == FA_ZONE_BOUNDARY)
+      {
+        if (zoneIsWall(zone->getName()))                             // if wall ensure nu_t = 0.0
+        {
+          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
+            mut_fa[ifa] = 0.0;
+        }
+        else
+          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)     // otherwise make first order extrapolation to face
+          {
+            int icv0 = cvofa[ifa][0];
+            mut_fa[ifa] = min(max(C_MU*rho[icv0]*v2[icv0]*turbTS[icv0], 0.0), 1.0);
+          }
+      }
+    }
+
+    for (int icv=0; icv<ncv; icv++)
+      muT[icv] = InterpolateAtCellCenterFromFaceValues(mut_fa, icv);
+  }
+
+  /**
+   * calculate diffusivity scalars
+   */
+  virtual void diffusivityHookScalarRansTurb(const string &name)
+  {
+    ScalarTranspEq *scal;
+
+    if (name == "kine")
+    {
+      scal = getScalarTransportData(name);
+      for (int ifa = 0; ifa < nfa; ifa++)
+        scal->diff[ifa] = mul_fa[ifa] + mut_fa[ifa]/scal->turbSchmidtNumber;
+    }
+
+    if (name == "eps")
+    {
+      scal = getScalarTransportData(name);
+      for (int ifa = 0; ifa < nfa; ifa++)
+        scal->diff[ifa] = mul_fa[ifa] + mut_fa[ifa]/scal->turbSchmidtNumber;
+    }
+  }
+
+  virtual void sourceHookScalarRansTurb_new(double *rhs, double *A, const string &name, int flagImplicit)
+  {
+    if (name == "kine")
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        double src  = getTurbProd(icv) - rho[icv]*eps[icv];
+        rhs[icv] += src*cv_volume[icv];
+
+        //d(rho*kine*eps/kine)/d(rho*kine)
+        if (flagImplicit)
+        {
+          double dsrcdphi = -eps[icv]/kine[icv];
+          int noc00 = nbocv_i[icv];
+          A[noc00] -= dsrcdphi*cv_volume[icv];
+        }
+      }
+    if (name == "eps")
+      for (int icv = 0; icv < ncv; icv++)
+      {
+        // the reference value is 0.045
+        // another good value is 0.0175
+        double ce1 = CEPS1*(1.0 + 0.045*pow(kine[icv]/v2[icv], 0.5));
+
+        double src = (ce1*getTurbProd(icv) - CEPS2*rho[icv]*eps[icv])/turbTS[icv];
+        rhs[icv]  += src*cv_volume[icv];
+
+        // d(ce2*rho*eps/TS)/d(rho*eps)
+        if (flagImplicit)
+        {
+          double dsrcdphi = -CEPS2/turbTS[icv];
+          int noc00 = nbocv_i[icv];
+          A[noc00] -= dsrcdphi*cv_volume[icv];
+        }
+      }
+  }
+
+  virtual void sourceHookRansTurbCoupled(double **rhs, double ***A, int nScal, int flagImplicit)
+  {
+    int kine_Index = 5+getScalarTransportIndex("kine");
+    int eps_Index =  5+getScalarTransportIndex("eps");
+
+    double dsrcdphi;
+
+    // mu_t*str*str - rho*k/k*eps
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double kine_src  = getTurbProd(icv)-rho[icv]*eps[icv];
+      double ce1 = CEPS1*(1.0 + 0.045*pow(kine[icv]/v2[icv], 0.5));
+      double eps_src = (ce1*getTurbProd(icv) - CEPS2*rho[icv]*eps[icv])/turbTS[icv];
+
+      rhs[icv][kine_Index] += kine_src*cv_volume[icv];
+      rhs[icv][eps_Index]  += eps_src*cv_volume[icv];
+
+      if (flagImplicit)
+      {
+        int noc00 = nbocv_i[icv];
+
+        dsrcdphi = -eps[icv]/kine[icv];
+        A[noc00][kine_Index][kine_Index] -= dsrcdphi*cv_volume[icv];
+        dsrcdphi = -1.;
+        A[noc00][kine_Index][eps_Index]  -= dsrcdphi*cv_volume[icv];
+
+        dsrcdphi = -CEPS2/turbTS[icv];
+        A[noc00][eps_Index][eps_Index] -= dsrcdphi*cv_volume[icv];
+      }
+    }
+  }
+
+  virtual void boundaryHookScalarRansTurb(double *phi_fa, FaZone *zone, const string &name)
+  {
+    if (name == "eps")
+    {
+      for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
+      {
+        int icv0 = cvofa[ifa][0];
+
+        double nVec[3], s_half[3];
+        normVec3d(nVec, fa_normal[ifa]);
+        vecMinVec3d(s_half, x_fa[ifa], x_cv[icv0]);
+        double wallDist = fabs(vecDotVec3d(s_half, nVec));
+        double nuLamCV = calcMuLam(icv0)/rho[icv0];
+        double epsWall = 2.0*nuLamCV*kine[icv0]/(wallDist*wallDist);
+
+        phi_fa[ifa] = epsWall;
+      }
+    }
+  }
+
+  void calcTurbTimeScale()
+  {
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double nu = calcMuLam(icv)/rho[icv];
+      double TimeScale = max(kine[icv]/eps[icv], 6.0*sqrt(nu/eps[icv]));
+      tturb[icv] = kine[icv]/eps[icv];
+      tkol[icv] = 6.0*sqrt(nu/eps[icv]);
+      trel[icv] = kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
+      bool realizable = true;
+      if (realizable)
+      {
+        double RealScale = kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
+        TimeScale = min(TimeScale, RealScale);
+      }
+
+      turbTS[icv] = TimeScale;
+    }
+    updateCvData(turbTS,REPLACE_DATA);
+  }
+
+  void calcTurbLengthScale()
+  {
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double nu = calcMuLam(icv)/rho[icv];
+      double LengthScale = CL*max(pow(kine[icv],1.5)/eps[icv], CETA*pow(nu,0.75)/pow(eps[icv],0.25));
+
+      lturb[icv] = CL*pow(kine[icv],1.5)/eps[icv];
+      lkol[icv] = CL*CETA*pow(nu,0.75)/pow(eps[icv],0.25);
+
+      bool realizable = true;
+      if (realizable)
+      {
+        double RealScale = pow(kine[icv],1.5)/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
+        LengthScale = min(LengthScale, RealScale);
+        lrel[icv] = RealScale;
+      }
+
+      turbLS[icv] = LengthScale;
+      // *** alternate turbLS *** //
+      //turbLS[icv] = 0.1;
+    }
+    updateCvData(turbLS,REPLACE_DATA);
+  }
+
+  double getTurbProd(int icv)
+  {
+    double Pk, mu_t;
+
+    switch(RIJ_BASED_PK)
+    {
+    case 0:
+      mu_t = min(max(C_MU*rho[icv]*v2[icv]*turbTS[icv], 0.0), 1.0);
+      Pk = mu_t*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv];
+      break;
+    case 1:
+      Pk = rij_diag[icv][0]*grad_u[icv][0][0]    + rij_offdiag[icv][0]*grad_u[icv][0][1] + rij_offdiag[icv][1]*grad_u[icv][0][2] +
+           rij_offdiag[icv][0]*grad_u[icv][1][0] + rij_diag[icv][1]*grad_u[icv][1][1]    + rij_offdiag[icv][2]*grad_u[icv][1][2] +
+           rij_offdiag[icv][1]*grad_u[icv][2][0] + rij_offdiag[icv][2]*grad_u[icv][2][1] + rij_diag[icv][2]*grad_u[icv][2][2];
+      break;
+    }
+
+    Pk = max(Pk,0.0);
+    if (LIMIT_PK == 1)
+      Pk = min(Pk, 20.0*rho[icv]*eps[icv]);
+    return Pk;
+  }
+
+  virtual void finalHookScalarRansTurbModel()
+  {
+    RansTurbASBM::finalHookScalarRansTurbModel();
+  }
+
+};
 
 #endif

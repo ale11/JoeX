@@ -3,6 +3,12 @@
 
 #include "UgpWithCvCompFlow.h"
 
+//######################################################//
+//                                                      //
+// Menter SST Two-Equation Model (SST) and (SST-2003)   //
+//                                                      //
+//######################################################//
+
 class RansTurbSST : virtual public UgpWithCvCompFlow
 {
 public:
@@ -89,14 +95,14 @@ public:
   double (*grad_omega)[3]; ///< gradient of omega
   double *kine_bfa;        ///< tke at the boundaries
   double *omega_bfa;       ///< omega at the boundaries
-  double *muT;             ///< turbulent viscosity at cell center for output
-  double *wallDist;        ///< distance to closest wall face
+  double *muT;             ///< turbulent viscosity at cell center
+  double *wallDist;        ///< wall distance
   double *crossDiff;       ///< cross-diffusion
   double *blendFuncF1;     ///< first blending function
   double *blendFuncF2;     ///< second blending function
   double *limiterFunc;     ///< vort. vs. strain visc. limiter
 
-  string sst_form;         ///< various model forms: standard, 2003, etc.
+  string sst_form;         ///< various model forms: standard vs 2003.
   
   // model constants
   double sigma_k1, sigma_k2, sigma_om1, sigma_om2;

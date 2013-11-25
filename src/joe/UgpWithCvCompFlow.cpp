@@ -4287,7 +4287,150 @@ int UgpWithCvCompFlow::calcEulerFlux_Lax(double &Frho, double *Frhou, double &Fr
 	return 0;
 }
 
+void UgpWithCvCompFlow::interpolateReStressToFace()
+{
+  // ====================================================================
+  // Compute internal face Reynolds stresses
+  // ====================================================================
+  for (int ifa = nfa_b; ifa < nfa; ifa++)
+  {
+    int icv0 = cvofa[ifa][0];
+    int icv1 = cvofa[ifa][1];
+    assert( icv0 >= 0 );
+    assert( icv1 >= 0 );
 
+    double dx0[3], dx1[3];
+    vecMinVec3d(dx0, x_fa[ifa], x_cv[icv0]);
+    vecMinVec3d(dx1, x_fa[ifa], x_cv[icv1]);
+    double w0 = sqrt(vecDotVec3d(dx0, dx0));
+    double w1 = sqrt(vecDotVec3d(dx1, dx1));
+
+    // Update Reynolds stresses
+    rij_diag_fa[ifa][0] = (w1*rij_diag[icv0][0] + w0*rij_diag[icv1][0])/(w0 + w1);
+    rij_diag_fa[ifa][1] = (w1*rij_diag[icv0][1] + w0*rij_diag[icv1][1])/(w0 + w1);
+    rij_diag_fa[ifa][2] = (w1*rij_diag[icv0][2] + w0*rij_diag[icv1][2])/(w0 + w1);
+
+    rij_offdiag_fa[ifa][0] = (w1*rij_offdiag[icv0][0] + w0*rij_offdiag[icv1][0])/(w0 + w1);
+    rij_offdiag_fa[ifa][1] = (w1*rij_offdiag[icv0][1] + w0*rij_offdiag[icv1][1])/(w0 + w1);
+    rij_offdiag_fa[ifa][2] = (w1*rij_offdiag[icv0][2] + w0*rij_offdiag[icv1][2])/(w0 + w1);
+  }
+
+  // ====================================================================
+  // Compute boundary face Reynolds stresses
+  // ====================================================================
+  for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
+  {
+    if (zone->getKind() == FA_ZONE_BOUNDARY)
+    {
+      Param *param;
+      if (getParam(param, zone->getName()))
+      {
+        // .............................................................................................
+        // SYMMETRY BOUNDARY CONDITION
+        // .............................................................................................
+        if (param->getString() == "SYMMETRY")
+        {
+          // No viscous flux in this case (or yes!)
+          double nVec[3], pVec[3], qVec[3];
+          double mag;
+          double unitMat[3][3], rijMat[3][3], rijbarMat[3][3];
+
+          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            assert( icv0 >= 0 );
+
+            // define Reynolds stresses
+            rij_diag_fa[ifa][0] = rij_diag[icv0][0];
+            rij_diag_fa[ifa][1] = rij_diag[icv0][1];
+            rij_diag_fa[ifa][2] = rij_diag[icv0][2];
+
+            rij_offdiag_fa[ifa][0] = rij_offdiag[icv0][0];
+            rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
+            rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
+
+            rijMat[0][0] = rij_diag[icv0][0];
+            rijMat[0][1] = rij_offdiag[icv0][0];
+            rijMat[0][2] = rij_offdiag[icv0][1];
+
+            rijMat[1][0] = rijMat[0][1];
+            rijMat[1][1] = rij_diag[icv0][1];
+            rijMat[1][2] = rij_offdiag[icv0][2];
+
+            rijMat[2][0] = rijMat[0][2];
+            rijMat[2][1] = rijMat[1][2];
+            rijMat[2][2] = rij_diag[icv0][2];
+
+            // compute new coordinate system
+            mag = normVec3d(nVec, fa_normal[ifa]);
+
+            int nof_f = noofa_i[ifa];
+            int nof_l = noofa_i[ifa+1]-1;
+            vecMinVec3d(pVec, x_no[noofa_v[nof_f]], x_no[noofa_v[nof_l]]);
+            mag = normVec3d(pVec);
+
+            qVec[0] = nVec[1] * pVec[2] - nVec[2] * pVec[1];
+            qVec[1] = nVec[2] * pVec[0] - nVec[0] * pVec[2];
+            qVec[1] = nVec[0] * pVec[1] - nVec[1] * pVec[0];
+
+            // transform Reynolds stresses
+            unitMat[0][0] = nVec[0];   unitMat[0][1] = nVec[1];   unitMat[0][2] = nVec[2];
+            unitMat[1][0] = pVec[0];   unitMat[1][1] = pVec[1];   unitMat[1][2] = pVec[2];
+            unitMat[2][0] = qVec[0];   unitMat[2][1] = qVec[1];   unitMat[2][2] = qVec[2];
+
+            similMatR3(rijbarMat, unitMat, rijMat);
+
+            // shear stresses are zero
+            rijbarMat[0][1] = 0.0;
+            rijbarMat[1][0] = 0.0;
+            rijbarMat[0][2] = 0.0;
+            rijbarMat[2][0] = 0.0;
+
+            // transform Reynolds stresses back to original coordinate system
+            transMatR3(unitMat);
+            similMatR3(rijMat, unitMat, rijbarMat);
+          }
+        }
+        // .............................................................................................
+        // WALL BOUNDARY CONDITION
+        // .............................................................................................
+        else if (param->getString() == "WALL")
+        {
+          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
+          {
+            rij_diag_fa[ifa][0] = 0.0;
+            rij_diag_fa[ifa][1] = 0.0;
+            rij_diag_fa[ifa][2] = 0.0;
+
+            rij_offdiag_fa[ifa][0] = 0.0;
+            rij_offdiag_fa[ifa][1] = 0.0;
+            rij_offdiag_fa[ifa][2] = 0.0;
+          }
+        }
+        // .............................................................................................
+        // OTHER BOUNDARY CONDITIONS
+        // .............................................................................................
+        else
+        {
+          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            assert( icv0 >= 0 );
+
+            // define Reynolds stresses
+            rij_diag_fa[ifa][0] = rij_diag[icv0][0];
+            rij_diag_fa[ifa][1] = rij_diag[icv0][1];
+            rij_diag_fa[ifa][2] = rij_diag[icv0][2];
+
+            rij_offdiag_fa[ifa][0] = rij_offdiag[icv0][0];
+            rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
+            rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
+          }
+        }
+      }
+    }
+  }
+}
 
 
 

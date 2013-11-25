@@ -716,7 +716,7 @@ public:   // member variables
   double epsilonSDWLS;
   
   int turbModel;
-  enum TurbModel{NONE, SA, KEPS, KOM, SST, V2F, GARET, ASBM, EASMkom, EASMkeps};
+  enum TurbModel{NONE, SA, KEPS, KOM, SST, V2F, GARET, ASBMkeps, EASMkom, EASMkeps};
 
 
   // Approximate Riemann solver
@@ -1271,10 +1271,11 @@ public:   // member functions
       const double nonL, const double *rij_d, const double *rij_offd, const double mul, const double mut, const double lambdaOverCp, const double kine_fa, const double *u_fa, const double *diff, const double *DiffTerm,
       const double area, const double *nVec, const double smag, const double *sVec, const double alpha, const int nScal);
   
-  
-  
+  /**
+   *  interpolate Reynolds stresses to faces
+   */
+  void interpolateReStressToFace();
 
-  
   /**
    * loop over scalars and solve them
    */

@@ -5,7 +5,7 @@
 
 class RansTurbEASM : virtual public UgpWithCvCompFlow
 {
-public:
+public: // constructor, destructor
   RansTurbEASM()
   {
     cmus   = NULL;       registerScalar(cmus,   "cmus",   CV_DATA);
@@ -13,8 +13,8 @@ public:
 
   virtual ~RansTurbEASM() {}
 
-public:
-  double *cmus; ///< variable CMU
+public: // member variables
+  double *cmus; ///< non-constant muT coefficient
 
 public:
   virtual void calcRsCenterEASM()
@@ -180,116 +180,15 @@ public:
     updateCvData(rij_offdiag, REPLACE_ROTATE_DATA);
 
     // Interpolate cell centered stresses to cell faces
-    interpolateStressToFace();
+    interpolateReStressToFace();
   }
-
-  virtual void interpolateStressToFace()
-  {
-    // ====================================================================
-    // Compute internal face Reynolds stresses
-    // ====================================================================
-    for (int ifa = nfa_b; ifa < nfa; ifa++)
-    {
-      int icv0 = cvofa[ifa][0];
-      int icv1 = cvofa[ifa][1];
-      assert( icv0 >= 0 );
-      assert( icv1 >= 0 );
-
-      double dx0[3], dx1[3];
-      vecMinVec3d(dx0, x_fa[ifa], x_cv[icv0]);
-      vecMinVec3d(dx1, x_fa[ifa], x_cv[icv1]);
-      double w0 = sqrt(vecDotVec3d(dx0, dx0));
-      double w1 = sqrt(vecDotVec3d(dx1, dx1));
-
-      // Update Reynolds stresses
-      rij_diag_fa[ifa][0] = (w1*rij_diag[icv0][0] + w0*rij_diag[icv1][0])/(w0 + w1);
-      rij_diag_fa[ifa][1] = (w1*rij_diag[icv0][1] + w0*rij_diag[icv1][1])/(w0 + w1);
-      rij_diag_fa[ifa][2] = (w1*rij_diag[icv0][2] + w0*rij_diag[icv1][2])/(w0 + w1);
-
-      rij_offdiag_fa[ifa][0] = (w1*rij_offdiag[icv0][0] + w0*rij_offdiag[icv1][0])/(w0 + w1);
-      rij_offdiag_fa[ifa][1] = (w1*rij_offdiag[icv0][1] + w0*rij_offdiag[icv1][1])/(w0 + w1);
-      rij_offdiag_fa[ifa][2] = (w1*rij_offdiag[icv0][2] + w0*rij_offdiag[icv1][2])/(w0 + w1);
-    }
-
-    // ====================================================================
-    // Compute boundary face Reynolds stresses
-    // ====================================================================
-    for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
-    {
-      if (zone->getKind() == FA_ZONE_BOUNDARY)
-      {
-        Param *param;
-        if (getParam(param, zone->getName()))
-        {
-          // .............................................................................................
-          // SYMMETRY BOUNDARY CONDITION
-          // .............................................................................................
-          if (param->getString() == "SYMMETRY")
-          {
-            // No viscous flux in this case (or yes!)
-
-            for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
-            {
-              int icv0 = cvofa[ifa][0];
-              assert( icv0 >= 0 );
-
-              // define Reynolds stresses
-              rij_diag_fa[ifa][0] = rij_diag[icv0][0];
-              rij_diag_fa[ifa][1] = rij_diag[icv0][1];
-              rij_diag_fa[ifa][2] = rij_diag[icv0][2];
-
-              rij_offdiag_fa[ifa][0] = rij_offdiag[icv0][0];
-              rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
-              rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
-
-            }
-          }
-          // .............................................................................................
-          // WALL BOUNDARY CONDITION
-          // .............................................................................................
-          else if (param->getString() == "WALL")
-          {
-            for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
-            {
-              rij_diag_fa[ifa][0] = 0.0;
-              rij_diag_fa[ifa][1] = 0.0;
-              rij_diag_fa[ifa][2] = 0.0;
-
-              rij_offdiag_fa[ifa][0] = 0.0;
-              rij_offdiag_fa[ifa][1] = 0.0;
-              rij_offdiag_fa[ifa][2] = 0.0;
-            }
-          }
-          // .............................................................................................
-          // OTHER BOUNDARY CONDITIONS
-          // .............................................................................................
-          else
-          {
-            for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
-            {
-              int icv0 = cvofa[ifa][0];
-              assert( icv0 >= 0 );
-
-              // define Reynolds stresses
-              rij_diag_fa[ifa][0] = rij_diag[icv0][0];
-              rij_diag_fa[ifa][1] = rij_diag[icv0][1];
-              rij_diag_fa[ifa][2] = rij_diag[icv0][2];
-
-              rij_offdiag_fa[ifa][0] = rij_offdiag[icv0][0];
-              rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
-              rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
-            }
-          }
-        }
-      }
-    }
-  }
-
 };
 
-/*
- * Nonlinear EASM k-omega (2003) Model (EASMko2003)
- */
+//######################################################//
+//                                                      //
+// Nonlinear EASM k-omega Model (EASMko2003)            //
+//                                                      //
+//######################################################//
 
 // differences with standard EASM:
 // muT is being limited between zero and one.
@@ -587,9 +486,11 @@ public:
   }
 };
 
-/*
- * Nonlinear EASM k-epsilon (2003) Model (EASMke2003)
- */
+//######################################################//
+//                                                      //
+// Nonlinear EASM k-epsilon Model (EASMko2003)          //
+//                                                      //
+//######################################################//
 
 // differences with standard EASM:
 // muT is being limited between zero and one.

@@ -3,11 +3,11 @@
 
 #include "UgpWithCvCompFlow.h"
 
-
-
-/**
- * wilcox k-omega model as in Turbulence Modeling for CFD, Third Edition, Wilcox 2006
- */
+//######################################################//
+//                                                      //
+// Wilcox k-omega Two-Equation Model (Wilcox2006)       //
+//                                                      //
+//######################################################//
 
 class RansTurbKOm : virtual public UgpWithCvCompFlow
 {
@@ -20,15 +20,13 @@ public:   // constructors
     
     turbModel = KOM;
 
-    betaStar   = getDoubleParam("betaStar",   "0.09");
-    sigmaOmega = getDoubleParam("sigmaOmega", "0.5");
-    sigmaStar  = getDoubleParam("sigmaStar",  "0.6");
-    alfa       = getDoubleParam("alfa",       "0.52");
-    sigmad0    = getDoubleParam("sigmad0",    "0.125");
-    beta0      = getDoubleParam("beta0",      "0.0708");
-    cLim       = getDoubleParam("cLim",       "0.875");
-
-    KOM_RealizableConstraint = getIntParam("KOM_RealizableConstraint",  "1");   // this is the one from Wilcox 2006
+    betaStar = getDoubleParam("betaStar", "0.09");
+    sigma_k  = getDoubleParam("sigma_k",  "0.6");
+    sigma_om = getDoubleParam("sigma_om", "0.5");
+    alfa     = getDoubleParam("alfa",     "0.52");
+    sigmad0  = getDoubleParam("sigmad0",  "0.125");
+    beta0    = getDoubleParam("beta0",    "0.0708");
+    cLim     = getDoubleParam("cLim",     "0.875");
 
     ScalarTranspEq *eq;
 
@@ -43,7 +41,7 @@ public:   // constructors
 
     eq = registerScalarTransport("omega", CV_DATA);
     eq->relax = getDoubleParam("RELAX_omega", "0.4");
-    eq->phiZero = 1.0e-6;
+    eq->phiZero = 1.0e-8;
     eq->phiZeroRel = 1.0e-2;
     eq->phiMaxiter = 1000;
     eq->lowerBound = 1.0e-4;
@@ -59,31 +57,33 @@ public:   // constructors
 
   virtual ~RansTurbKOm() {}
 
-public:   // member vars
+public:
 
-  double *kine_bfa, (*grad_kine)[3];
-  double *omega, *omega_bfa, (*grad_omega)[3];
-  double *muT;                      ///< turbulent viscosity at cell center for output
-  double *wallDist;                 ///< wall distance
+  // model variables
+  double *omega;           ///< specific dissipation
+  double (*grad_kine)[3];  ///< gradient of tke
+  double (*grad_omega)[3]; ///< gradient of omega
+  double *kine_bfa;        ///< tke at the boundaries
+  double *omega_bfa;       ///< omega at the boundaries
+  double *muT;             ///< turbulent viscosity at cell center
+  double *wallDist;        ///< wall distance
   
-  double betaStar, sigmaOmega, sigmaStar, alfa, sigmad0, beta0, cLim;
-  int KOM_RealizableConstraint;
+  // model constants
+  double betaStar, sigma_om, sigma_k, alfa, sigmad0, beta0, cLim;
 
-public:   // member functions
+public:
   
   virtual void initialHookScalarRansTurbModel()
   {
     if (mpi_rank == 0) 
       cout << "initialHook WILCOX KOM model" << endl;
 
-    if (!checkParam("DO_NOT_CALC_WALLDIST"))
-      if (!checkDataFlag(wallDist))
-      {
-        for (int icv=0; icv<ncv; icv++)
-          wallDist[icv] = 0.0;
-
-        calcWallDistance(NULL, wallDist);
-      }
+    if (!checkDataFlag(wallDist))
+    {
+      for (int icv=0; icv<ncv; icv++)
+        wallDist[icv] = 0.0;
+      calcWallDistance(NULL, wallDist);
+    }
 
     // connect pointers
     ScalarTranspEq *eq;
@@ -93,8 +93,8 @@ public:   // member functions
 
   virtual void calcRansTurbViscMuet()
   {
+    // update velocity gradients
     calcGradVel();
-    // update strain rate tensor 
     calcStrainRateAndDivergence();
     calcVorticity();
 
@@ -115,21 +115,8 @@ public:   // member functions
       double om_fa = (w1*omega[icv0] + w0*omega[icv1])/(w0+w1);
       double strMag_fa = (w1*strMag[icv0] + w0*strMag[icv1])/(w0+w1);
 
-      
-      if (KOM_RealizableConstraint == 1)
-      {
-        double omega_tilde = max(om_fa, cLim*strMag_fa/sqrt(betaStar));
-        mut_fa[ifa] = min(rho_fa*kine_fa/omega_tilde, 100.0);
-      }
-      else if (KOM_RealizableConstraint == 2)
-      {
-        double TS = min(1.0/om_fa, 0.6/(sqrt(6.0)*strMag_fa));
-        mut_fa[ifa] = rho_fa*kine_fa*TS;
-      }
-      else
-      {
-        mut_fa[ifa] = min(rho_fa*kine_fa/om_fa, 100.0);
-      }
+      double omega_tilde = max(om_fa, cLim*strMag_fa/sqrt(betaStar));
+      mut_fa[ifa] = min(rho_fa*kine_fa/omega_tilde, 100.0);
     }
 
     // boundary faces
@@ -144,20 +131,8 @@ public:   // member functions
         {
           int icv0 = cvofa[ifa][0];
           
-          if (KOM_RealizableConstraint == 1)
-          {
-            double omega_tilde = max(omega[icv0], cLim*strMag[icv0]/sqrt(betaStar));
-            mut_fa[ifa] = min(rho[icv0]*kine[icv0]/omega_tilde, 100.0);    // zero order extrapolation for others
-          }
-          else if (KOM_RealizableConstraint == 2)
-          {
-            double TS = min(1.0/omega[icv0], 0.6/(sqrt(6.0)*strMag[icv0]));
-            mut_fa[ifa] = rho[icv0]*kine[icv0]*TS;
-          }
-          else
-          {
-            mut_fa[ifa] = min(rho[icv0]*kine[icv0]/omega[icv0], 100.0);    // zero order extrapolation for others
-          }
+          double omega_tilde = max(omega[icv0], cLim*strMag[icv0]/sqrt(betaStar));
+          mut_fa[ifa] = min(rho[icv0]*kine[icv0]/omega_tilde, 100.0);    // zero order extrapolation for others
         }
     }
 
@@ -166,8 +141,6 @@ public:   // member functions
       muT[icv] = InterpolateAtCellCenterFromFaceValues(mut_fa, icv);
   }
 
-
-
   virtual void diffusivityHookScalarRansTurb(const string &name)
   {
     ScalarTranspEq *eq;
@@ -175,8 +148,8 @@ public:   // member functions
     if ((name == "kine") || (name == "omega"))
     {
       double sigma;
-      if (name == "kine")       sigma = sigmaStar;
-      if (name == "omega")      sigma = sigmaOmega;
+      if (name == "kine")       sigma = sigma_k;
+      if (name == "omega")      sigma = sigma_om;
 
       eq = getScalarTransportData(name);
       
@@ -196,8 +169,7 @@ public:   // member functions
         double kine_fa = (w1*kine[icv0] + w0*kine[icv1])/(w0+w1);
         double om_fa = (w1*omega[icv0] + w0*omega[icv1])/(w0+w1);
 
-        eq->diff[ifa] = mul_fa[ifa] + sigma*rho_fa*kine_fa/om_fa;//mut_fa[ifa];//
-        //eq->diff[ifa] = mul_fa[ifa] + sigma*mut_fa[ifa];
+        eq->diff[ifa] = mul_fa[ifa] + sigma*rho_fa*kine_fa/om_fa;
       }
 
       // boundary faces
@@ -217,94 +189,9 @@ public:   // member functions
           for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
           {
             int icv0 = cvofa[ifa][0];
-            eq->diff[ifa] = mul_fa[ifa] + sigma*rho_bfa[ifa]*kine_bfa[ifa]/omega_bfa[ifa]; //mut_fa[ifa];//
-            //eq->diff[ifa] = mul_fa[ifa] + sigma*rho[icv0]*kine[icv0]/omega[icv0];//mut_fa[ifa];//
-            //eq->diff[ifa] = mul_fa[ifa] + sigma*mut_fa[ifa];//
+            eq->diff[ifa] = mul_fa[ifa] + sigma*rho_bfa[ifa]*kine_bfa[ifa]/omega_bfa[ifa];
           }
         }
-      }
-    }
-  }
-
-  virtual double calcTurbProd(int icv)
-  {
-    if (KOM_RealizableConstraint == 1)
-    {
-      double omega_tilde = max(omega[icv], cLim*strMag[icv]/sqrt(betaStar));
-      double mu_t = rho[icv]*kine[icv]/omega_tilde;
-      return max(mu_t*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv], 0.0);
-    }
-    else if (KOM_RealizableConstraint == 2)
-    {
-      double TS = min(1.0/(omega[icv]), 0.6/(sqrt(6.0)*strMag[icv]));
-      double mu_t = rho[icv]*kine[icv]*TS;
-      return max(mu_t*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv], 0.0);
-    }
-    else
-    {
-      double mu_t = rho[icv]*kine[icv]/omega[icv];
-      return max(mu_t*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv], 0.0);
-    }
-  }
-
-  virtual void sourceHookScalarRansTurb(double *rhs, double *A, const string &name)
-  {
-    if (name == "kine")
-    for (int icv=0; icv<ncv; icv++)
-    {
-      rhs[icv] += calcTurbProd(icv)*cv_volume[icv];
-
-      int noc00 = nbocv_i[icv];
-      double dsrcdphi = - betaStar*rho[icv]*omega[icv];
-      A[noc00] -= dsrcdphi*cv_volume[icv];
-    }
-
-    if (name == "omega")
-    {
-      double OM[3][3], STR_hat[3][3];
-
-      for (int icv=0; icv<ncv; icv++)
-      {
-        double sigmad; 
-        double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
-        
-        double TS = 1.0;
-        if (KOM_RealizableConstraint == 2)
-        {
-          TS = min(1.0/(omega[icv]), 0.6/(sqrt(6.0)*strMag[icv]));
-        }
-
-        if (crossDiff <= 0.0)   sigmad = 0.0;
-        else                    sigmad = sigmad0;
-
-        double src = TS*alfa*omega[icv]/kine[icv]*calcTurbProd(icv) + sigmad*rho[icv]/omega[icv]*crossDiff;
-        rhs[icv] += src*cv_volume[icv];
-
-        double divU = grad_u[icv][0][0] + grad_u[icv][1][1] + grad_u[icv][2][2];
-
-        for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-        {
-          OM[i][j] = 0.5*(grad_u[icv][i][j] - grad_u[icv][j][i]);
-          
-          // strange: STR_hat subtracts 0.5 divergence instead 1/3, no bug!!!
-          if (i==j)   STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i] - divU);
-          else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
-        }
-
-        double chiOm = 0.0;
-        for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-        for (int k=0; k<3; k++)
-          chiOm += OM[i][j]*OM[j][k]*STR_hat[k][i];
-        chiOm = fabs(chiOm/pow(betaStar*omega[icv], 3.0));
-        
-        double fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
-        double beta = beta0*fbeta;
-
-        int noc00 = nbocv_i[icv];
-        double dsrcdphi = -TS*beta*rho[icv]*omega[icv];
-        A[noc00] -= dsrcdphi*cv_volume[icv];
       }
     }
   }
@@ -312,60 +199,57 @@ public:   // member functions
   virtual void sourceHookScalarRansTurb_new(double *rhs, double *A, const string &name, int flagImplicit)
   {
     if (name == "kine")
-    for (int icv=0; icv<ncv; icv++)
-    {
-      double src = calcTurbProd(icv) - betaStar*rho[icv]*omega[icv]*kine[icv];
-      rhs[icv] += src*cv_volume[icv];
-
-      if (flagImplicit)
+      for (int icv=0; icv<ncv; icv++)
       {
-        int noc00 = nbocv_i[icv];
-        double dsrcdphi = - betaStar*omega[icv];
-        A[noc00] -= dsrcdphi*cv_volume[icv];
+        double src = calcTurbProd(icv) - betaStar*rho[icv]*omega[icv]*kine[icv];
+        rhs[icv] += src*cv_volume[icv];
+
+        if (flagImplicit)
+        {
+          int noc00 = nbocv_i[icv];
+          double dsrcdphi = - betaStar*omega[icv];
+          A[noc00] -= dsrcdphi*cv_volume[icv];
+        }
       }
-    }
 
     if (name == "omega")
     {
       double OM[3][3], STR_hat[3][3];
 
+      calcCvScalarGrad(grad_kine,  kine,  kine_bfa,  gradreconstruction, limiterNavierS, kine,  epsilonSDWLS);
+      calcCvScalarGrad(grad_omega, omega, omega_bfa, gradreconstruction, limiterNavierS, omega, epsilonSDWLS);
+
       for (int icv=0; icv<ncv; icv++)
       {
-
-        double TS = 1.0;
-        if (KOM_RealizableConstraint == 2)
-          TS = min(1.0/(omega[icv]), 0.6/(sqrt(6.0)*strMag[icv]));
-
+        // cross-diffusion
         double sigmad;
         double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
+        if (crossDiff <= 0.0) sigmad = 0.0;
+        else                  sigmad = sigmad0;
 
-        if (crossDiff <= 0.0)   sigmad = 0.0;
-        else                    sigmad = sigmad0;
-
-        double divU = grad_u[icv][0][0] + grad_u[icv][1][1] + grad_u[icv][2][2];
-
+        // rate of strain and rotation tensors
         for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-        {
-          OM[i][j] = 0.5*(grad_u[icv][i][j] - grad_u[icv][j][i]);
+          for (int j=0; j<3; j++)
+          {
+            OM[i][j] = 0.5*(grad_u[icv][i][j] - grad_u[icv][j][i]);
+            // STR_hat subtracts 0.5 divergence instead of 1/3!!!
+            if (i==j)   STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i] - diverg[icv]);
+            else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
+          }
 
-          // strange: STR_hat subtracts 0.5 divergence instead 1/3, no bug!!!
-          if (i==j)   STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i] - divU);
-          else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
-        }
-
+        // chi_omega
         double chiOm = 0.0;
         for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-        for (int k=0; k<3; k++)
-          chiOm += OM[i][j]*OM[j][k]*STR_hat[k][i];
+          for (int j=0; j<3; j++)
+            for (int k=0; k<3; k++)
+              chiOm += OM[i][j]*OM[j][k]*STR_hat[k][i];
         chiOm = fabs(chiOm/pow(betaStar*omega[icv], 3.0));
 
         double fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
         double beta = beta0*fbeta;
 
-        double src =  TS*alfa*omega[icv]/kine[icv]*calcTurbProd(icv)
-                    - TS*beta*rho[icv]*omega[icv]*omega[icv]
+        double src =  alfa*omega[icv]/kine[icv]*calcTurbProd(icv)
+                    - beta*rho[icv]*omega[icv]*omega[icv]
                     + sigmad*rho[icv]/omega[icv]*crossDiff;
 
         rhs[icv] += src*cv_volume[icv];
@@ -373,7 +257,7 @@ public:   // member functions
         if (flagImplicit)
         {
           int noc00 = nbocv_i[icv];
-          double dsrcdphi = -2.0*TS*beta*omega[icv];
+          double dsrcdphi = -2.0*beta*omega[icv];
           A[noc00] -= dsrcdphi*cv_volume[icv];
         }
       }
@@ -387,52 +271,51 @@ public:   // member functions
     
     double OM[3][3], STR_hat[3][3];
 
+    calcCvScalarGrad(grad_kine,  kine,  kine_bfa,  gradreconstruction, limiterNavierS, kine,  epsilonSDWLS);
+    calcCvScalarGrad(grad_omega, omega, omega_bfa, gradreconstruction, limiterNavierS, omega, epsilonSDWLS);
+
     for (int icv = 0; icv < ncv; icv++)
     {
-      double TS = 1.0;
-      if (KOM_RealizableConstraint == 2)
-        TS = min(1.0/(omega[icv]), 0.6/(sqrt(6.0)*strMag[icv]));
-
+      // cross-diffusion
       double sigmad;
       double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
+      if (crossDiff <= 0.0) sigmad = 0.0;
+      else                  sigmad = sigmad0;
 
-      if (crossDiff <= 0.0)   sigmad = 0.0;
-      else                    sigmad = sigmad0;
-
-      double divU = grad_u[icv][0][0] + grad_u[icv][1][1] + grad_u[icv][2][2];
-
+      // rate of strain and rotation tensors
       for (int i=0; i<3; i++)
-      for (int j=0; j<3; j++)
-      {
-        OM[i][j] = 0.5*(grad_u[icv][i][j] - grad_u[icv][j][i]);
+        for (int j=0; j<3; j++)
+        {
+          OM[i][j] = 0.5*(grad_u[icv][i][j] - grad_u[icv][j][i]);
 
-        // strange: STR_hat subtracts 0.5 divergence instead 1/3, no bug!!!
-        if (i==j)   STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i] - divU);
-        else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
-      }
+          // STR_hat subtracts 0.5 divergence instead 1/3, no bug!!!
+          if (i==j)   STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i] - diverg[icv]);
+          else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
+        }
 
+      // chi_omega
       double chiOm = 0.0;
       for (int i=0; i<3; i++)
-      for (int j=0; j<3; j++)
-      for (int k=0; k<3; k++)
-        chiOm += OM[i][j]*OM[j][k]*STR_hat[k][i];
+        for (int j=0; j<3; j++)
+          for (int k=0; k<3; k++)
+            chiOm += OM[i][j]*OM[j][k]*STR_hat[k][i];
       chiOm = fabs(chiOm/pow(betaStar*omega[icv], 3.0));
 
       double fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
       double beta = beta0*fbeta;
 
-      double src =  TS*alfa*omega[icv]/kine[icv]*calcTurbProd(icv)
-                  - TS*beta*rho[icv]*omega[icv]*omega[icv]
+      double src =  alfa*omega[icv]/kine[icv]*calcTurbProd(icv)
+                  - beta*rho[icv]*omega[icv]*omega[icv]
                   + sigmad*rho[icv]/omega[icv]*crossDiff;
 
-      rhs[icv][5+kine_Index]  += (calcTurbProd(icv) - betaStar * rho[icv] * omega[icv] * kine[icv]) * cv_volume[icv];
-      rhs[icv][5+omega_Index] += src * cv_volume[icv];
+      rhs[icv][5+kine_Index]  += (calcTurbProd(icv) - betaStar*rho[icv]*omega[icv]*kine[icv])*cv_volume[icv];
+      rhs[icv][5+omega_Index] += src*cv_volume[icv];
 
       if (flagImplicit)
       {
         int noc00 = nbocv_i[icv];
-        A[noc00][5+kine_Index][5+kine_Index]   -= - betaStar * omega[icv] * cv_volume[icv];
-        A[noc00][5+omega_Index][5+omega_Index] -= - 2.0 * TS * beta * omega[icv] * cv_volume[icv];
+        A[noc00][5+kine_Index][5+kine_Index]   -= - betaStar*omega[icv]*cv_volume[icv];
+        A[noc00][5+omega_Index][5+omega_Index] -= - 2.0*beta*omega[icv]*cv_volume[icv];
      }
     }
   }
@@ -453,6 +336,13 @@ public:   // member functions
           }
         }
     }
+  }
+
+  virtual double calcTurbProd(int icv)
+  {
+    double omega_tilde = max(omega[icv], cLim*strMag[icv]/sqrt(betaStar));
+    double mu_t = rho[icv]*kine[icv]/omega_tilde;
+    return max(mu_t*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv], 0.0);
   }
 
 };

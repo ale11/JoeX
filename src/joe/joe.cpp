@@ -372,30 +372,30 @@ public:
 };
 
 /*
- * MyJoe with ASBM model
+ * MyJoe with ASBMkeps model
  */
-class MyJoeASBM : public MyJoe, public RansTurbASBM
+class MyJoeASBMkeps : public MyJoe, public RansTurbASBMkeps
 {
 public:
-  MyJoeASBM(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
+  MyJoeASBMkeps(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
   {
     if (mpi_rank == 0)
-      cout << "MyJoeASBM()" << endl;
+      cout << "MyJoeASBMkeps()" << endl;
   }
 
-  virtual ~MyJoeASBM() {}
+  virtual ~MyJoeASBMkeps() {}
 };
 
 /*
  * Compute the Barycentric maps
  */
-class BaryMaps: public MyJoeASBM{
+class BaryMaps: public MyJoeASBMkeps{
 public:
   double (*baryCo)[3];          /// Barycentric map coordinates
   double (*colorC)[3];          /// Barycentric map colors
 
 public:
-  BaryMaps(char *name) : MyJoeASBM(name), UgpWithCvCompFlow(name)
+  BaryMaps(char *name) : MyJoeASBMkeps(name), UgpWithCvCompFlow(name)
   {
     if (mpi_rank == 0)
       cout << "BaryMaps()" << endl;
@@ -1325,7 +1325,7 @@ int main(int argc, char *argv[])
     case 4:   joe = new MyJoeKEps(inputFileName);       break;
     case 5:   joe = new MyJoeV2F(inputFileName);        break;
     case 6:   joe = new MyJoeEASMkom(inputFileName);    break;
-    case 7:   joe = new MyJoeASBM(inputFileName);       break;
+    case 7:   joe = new MyJoeASBMkeps(inputFileName);   break;
     case 8:   joe = new BaryMaps(inputFileName);        break;
     case 9:   joe = new NonPerChan(inputFileName);      break;
     default: 
