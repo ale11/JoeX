@@ -49,7 +49,6 @@ public:   // constructors
     eq->reconstruction = getStringParam("SCALAR_TURB_RECONSTRUCTION", "STANDARD");
 
     strMag   = NULL;       registerScalar(strMag, "strMag", CV_DATA);
-    vortMag  = NULL;       registerScalar(vortMag, "vortMag", CV_DATA);
     diverg   = NULL;       registerScalar(diverg, "diverg", CV_DATA);
     muT      = NULL;       registerScalar(muT, "muT", CV_DATA);
     wallDist = NULL;       registerScalar(wallDist, "wallDist",  CV_DATA);
@@ -96,7 +95,14 @@ public:
     // update velocity gradients
     calcGradVel();
     calcStrainRateAndDivergence();
-    calcVorticity();
+
+    // eddy-viscosity at cell center
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double omega_tilde = max(omega[icv], cLim*strMag[icv]/sqrt(betaStar));
+      muT[icv] = min(rho[icv]*kine[icv]/omega_tilde, 100.0);
+    }
+    updateCvData(muT, REPLACE_DATA);
 
     // internal faces
     for (int ifa=nfa_b; ifa<nfa; ifa++)
@@ -110,35 +116,23 @@ public:
       double w0 = sqrt(vecDotVec3d(dx0, dx0));
       double w1 = sqrt(vecDotVec3d(dx1, dx1));
 
-      double rho_fa = (w1*rho[icv0] + w0*rho[icv1])/(w0+w1);
-      double kine_fa = (w1*kine[icv0] + w0*kine[icv1])/(w0+w1);
-      double om_fa = (w1*omega[icv0] + w0*omega[icv1])/(w0+w1);
-      double strMag_fa = (w1*strMag[icv0] + w0*strMag[icv1])/(w0+w1);
-
-      double omega_tilde = max(om_fa, cLim*strMag_fa/sqrt(betaStar));
-      mut_fa[ifa] = min(rho_fa*kine_fa/omega_tilde, 100.0);
+      mut_fa[ifa] = (w1*muT[icv0] + w0*muT[icv1])/(w0+w1);
     }
 
     // boundary faces
     for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
-    if (zone->getKind() == FA_ZONE_BOUNDARY)
-    {
-      if (zoneIsWall(zone->getName()))
-        for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
-          mut_fa[ifa] = 0.0;                                     // set mut zero at walls
-      else
-        for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
-        {
-          int icv0 = cvofa[ifa][0];
-          
-          double omega_tilde = max(omega[icv0], cLim*strMag[icv0]/sqrt(betaStar));
-          mut_fa[ifa] = min(rho[icv0]*kine[icv0]/omega_tilde, 100.0);    // zero order extrapolation for others
-        }
-    }
-
-    // just calculate mut in cell center by averaging over all face values
-    for (int icv=0; icv<ncv; icv++)
-      muT[icv] = InterpolateAtCellCenterFromFaceValues(mut_fa, icv);
+      if (zone->getKind() == FA_ZONE_BOUNDARY)
+      {
+        if (zoneIsWall(zone->getName()))
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+            mut_fa[ifa] = 0.0;        // set mut zero at walls
+        else
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            mut_fa[ifa] = muT[icv0];  // zero order extrapolation for others
+          }
+      }
   }
 
   virtual void diffusivityHookScalarRansTurb(const string &name)
@@ -201,7 +195,10 @@ public:
     if (name == "kine")
       for (int icv=0; icv<ncv; icv++)
       {
-        double src = calcTurbProd(icv) - betaStar*rho[icv]*omega[icv]*kine[icv];
+        double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
+        Pk = max(Pk, 0.0);
+
+        double src = Pk - betaStar*rho[icv]*omega[icv]*kine[icv];
         rhs[icv] += src*cv_volume[icv];
 
         if (flagImplicit)
@@ -221,13 +218,11 @@ public:
 
       for (int icv=0; icv<ncv; icv++)
       {
-        // cross-diffusion
-        double sigmad;
-        double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
-        if (crossDiff <= 0.0) sigmad = 0.0;
-        else                  sigmad = sigmad0;
+        // Production of tke
+        double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
+        Pk = max(Pk, 0.0);
 
-        // rate of strain and rotation tensors
+        // Destruction of omega
         for (int i=0; i<3; i++)
           for (int j=0; j<3; j++)
           {
@@ -237,7 +232,6 @@ public:
             else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
           }
 
-        // chi_omega
         double chiOm = 0.0;
         for (int i=0; i<3; i++)
           for (int j=0; j<3; j++)
@@ -248,7 +242,13 @@ public:
         double fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
         double beta = beta0*fbeta;
 
-        double src =  alfa*omega[icv]/kine[icv]*calcTurbProd(icv)
+        // Cross-diffusion of omega
+        double sigmad;
+        double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
+        if (crossDiff <= 0.0) sigmad = 0.0;
+        else                  sigmad = sigmad0;
+
+        double src =  alfa*omega[icv]/kine[icv]*Pk
                     - beta*rho[icv]*omega[icv]*omega[icv]
                     + sigmad*rho[icv]/omega[icv]*crossDiff;
 
@@ -276,13 +276,11 @@ public:
 
     for (int icv = 0; icv < ncv; icv++)
     {
-      // cross-diffusion
-      double sigmad;
-      double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
-      if (crossDiff <= 0.0) sigmad = 0.0;
-      else                  sigmad = sigmad0;
+      // Production of tke
+      double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
+      Pk = max(Pk, 0.0);
 
-      // rate of strain and rotation tensors
+      // Destruction of omega
       for (int i=0; i<3; i++)
         for (int j=0; j<3; j++)
         {
@@ -293,7 +291,6 @@ public:
           else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
         }
 
-      // chi_omega
       double chiOm = 0.0;
       for (int i=0; i<3; i++)
         for (int j=0; j<3; j++)
@@ -304,11 +301,17 @@ public:
       double fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
       double beta = beta0*fbeta;
 
-      double src =  alfa*omega[icv]/kine[icv]*calcTurbProd(icv)
+      // Cross-diffusion of omega
+      double sigmad;
+      double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
+      if (crossDiff <= 0.0) sigmad = 0.0;
+      else                  sigmad = sigmad0;
+
+      double src =  alfa*omega[icv]/kine[icv]*Pk
                   - beta*rho[icv]*omega[icv]*omega[icv]
                   + sigmad*rho[icv]/omega[icv]*crossDiff;
 
-      rhs[icv][5+kine_Index]  += (calcTurbProd(icv) - betaStar*rho[icv]*omega[icv]*kine[icv])*cv_volume[icv];
+      rhs[icv][5+kine_Index]  += (Pk - betaStar*rho[icv]*omega[icv]*kine[icv])*cv_volume[icv];
       rhs[icv][5+omega_Index] += src*cv_volume[icv];
 
       if (flagImplicit)
@@ -336,13 +339,6 @@ public:
           }
         }
     }
-  }
-
-  virtual double calcTurbProd(int icv)
-  {
-    double omega_tilde = max(omega[icv], cLim*strMag[icv]/sqrt(betaStar));
-    double mu_t = rho[icv]*kine[icv]/omega_tilde;
-    return max(mu_t*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv], 0.0);
   }
 
 };

@@ -716,7 +716,7 @@ public:   // member variables
   double epsilonSDWLS;
   
   int turbModel;
-  enum TurbModel{NONE, SA, KEPS, KOM, SST, V2F, GARET, ASBMkeps, EASMkom, EASMkeps};
+  enum TurbModel{NONE, SA, KEPS, KOM, SST, V2F, GARET, ASBMkom, ASBMkeps, EASMkom, EASMkeps};
 
 
   // Approximate Riemann solver
@@ -1519,7 +1519,7 @@ public:   // member functions
       if (dTang2 > specRadius2)   wd[icv] = minDist;
       else                        wd[icv] = fabs(vecDotVec3d(s_half, n));
 
-      wc[icv] = ifaSave;
+      if (wc != NULL) wc[icv] = ifaSave;
     }
     
     MPI_Barrier(mpi_comm);

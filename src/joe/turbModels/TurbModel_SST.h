@@ -270,7 +270,6 @@ public:
       for (int icv=0; icv<ncv; icv++)
       {
         double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
-
         Pk = min(Pk, boundPk*betaStar*rho[icv]*kine[icv]*omega[icv]);
         Pk = max(Pk, 0.0);
 
