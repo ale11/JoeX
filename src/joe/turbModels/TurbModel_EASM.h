@@ -166,13 +166,13 @@ public:
       r13 = -cmustau*(S13 + a2*a4*(S1kWk3 - W1kSk3) - 2.0*a3*a4*S1kSk3);
       r23 = -cmustau*(S23 + a2*a4*(S2kWk3 - W2kSk3) - 2.0*a3*a4*S2kSk3);
 
-      rij_diag[icv][0] = -max(r11,0.)*2*kine[icv]*rho[icv];
-      rij_diag[icv][1] = -max(r22,0.)*2*kine[icv]*rho[icv];
-      rij_diag[icv][2] = -max(r33,0.)*2*kine[icv]*rho[icv];
+      rij_diag[icv][0] = -max(r11,0.)*2.0*kine[icv]*rho[icv];
+      rij_diag[icv][1] = -max(r22,0.)*2.0*kine[icv]*rho[icv];
+      rij_diag[icv][2] = -max(r33,0.)*2.0*kine[icv]*rho[icv];
 
-      rij_offdiag[icv][0] = -r12*2*kine[icv]*rho[icv];
-      rij_offdiag[icv][1] = -r13*2*kine[icv]*rho[icv];
-      rij_offdiag[icv][2] = -r23*2*kine[icv]*rho[icv];
+      rij_offdiag[icv][0] = -r12*2.0*kine[icv]*rho[icv];
+      rij_offdiag[icv][1] = -r13*2.0*kine[icv]*rho[icv];
+      rij_offdiag[icv][2] = -r23*2.0*kine[icv]*rho[icv];
     }
 
     updateCvData(cmus, REPLACE_DATA);
@@ -191,7 +191,7 @@ public:
 //######################################################//
 
 // differences with standard EASM:
-// muT is being limited between zero and one.
+// -muT is being limited between zero and one.
 // -for production of w, I divide by a limited k/w.
 // -the production of w (instead of just k) is also being limited.
 
@@ -253,7 +253,7 @@ public:
   double C_MU, SIG_K, SIG_O, BETA, G_OM; ///< model constants
 
   int LIMIT_PK;   ///< limiter for tke production
-  int REALIZABLE; ///< realizability limits for turbTS, turbLS
+  int REALIZABLE; ///< realizability limits for turbTS
 
 public:
 

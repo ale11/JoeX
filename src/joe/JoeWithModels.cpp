@@ -125,7 +125,8 @@ void JoeWithModels::initialHook()
         double uvel1 = profilesIC[pos-1][2];
         double uvel2 = profilesIC[pos][2];
         rhou[icv][0] = uvel1*rho1 + fi*(uvel2*rho2 - uvel1*rho1);
-        rhou[icv][1] = rhou[icv][2] = 0.0;
+        rhou[icv][1] = 0.0;
+        rhou[icv][2] = 0.0;
 
         double press1 = profilesIC[pos-1][4];
         double press2 = profilesIC[pos][4];

@@ -387,6 +387,21 @@ public:
 };
 
 /*
+ * MyJoe with ASBMkom model
+ */
+class MyJoeASBMkom: public MyJoe, public RansTurbASBMkom
+{
+public:
+  MyJoeASBMkom(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
+  {
+    if (mpi_rank == 0)
+      cout << "MyJoeASBMkom()" << endl;
+  }
+
+  virtual ~MyJoeASBMkom() {}
+};
+
+/*
  * Compute the Barycentric maps
  */
 class BaryMaps: public MyJoeASBMkeps{
@@ -1326,8 +1341,9 @@ int main(int argc, char *argv[])
     case 5:   joe = new MyJoeV2F(inputFileName);        break;
     case 6:   joe = new MyJoeEASMkom(inputFileName);    break;
     case 7:   joe = new MyJoeASBMkeps(inputFileName);   break;
-    case 8:   joe = new BaryMaps(inputFileName);        break;
-    case 9:   joe = new NonPerChan(inputFileName);      break;
+    case 8:   joe = new MyJoeASBMkom(inputFileName);    break;
+    case 9:   joe = new BaryMaps(inputFileName);        break;
+    case 10:  joe = new NonPerChan(inputFileName);      break;
     default: 
       if (mpi_rank == 0)
         cerr << "ERROR: run number not available!" << endl;

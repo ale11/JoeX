@@ -237,8 +237,6 @@ public:   // member functions
       smoothingVec(wt_offdiag);
     }
 
-    //if (step == start_asbm)
-    //{
     // ====================================================================
     // Compute Reynolds stresses
     // ====================================================================
@@ -310,7 +308,6 @@ public:   // member functions
 //      updateCvData(ar_diag, REPLACE_ROTATE_DATA);
 //      updateCvData(ar_offdiag, REPLACE_ROTATE_DATA);
 //    }
-    //}
 
     for (int icv = 0; icv < ncv; icv++)
     {
@@ -353,13 +350,13 @@ public:   // member functions
              << " Cell-z: " << x_cv[icv][2] << endl;
       }
 
-      rij_diag[icv][0] = -REY[0][0]*2*kine[icv]*rho[icv];
-      rij_diag[icv][1] = -REY[1][1]*2*kine[icv]*rho[icv];
-      rij_diag[icv][2] = -REY[2][2]*2*kine[icv]*rho[icv];
+      rij_diag[icv][0] = -REY[0][0]*2.0*kine[icv]*rho[icv];
+      rij_diag[icv][1] = -REY[1][1]*2.0*kine[icv]*rho[icv];
+      rij_diag[icv][2] = -REY[2][2]*2.0*kine[icv]*rho[icv];
 
-      rij_offdiag[icv][0] = -REY[0][1]*2*kine[icv]*rho[icv];
-      rij_offdiag[icv][1] = -REY[0][2]*2*kine[icv]*rho[icv];
-      rij_offdiag[icv][2] = -REY[1][2]*2*kine[icv]*rho[icv];
+      rij_offdiag[icv][0] = -REY[0][1]*2.0*kine[icv]*rho[icv];
+      rij_offdiag[icv][1] = -REY[0][2]*2.0*kine[icv]*rho[icv];
+      rij_offdiag[icv][2] = -REY[1][2]*2.0*kine[icv]*rho[icv];
 
       scal_phi[icv] = CIR[0][0];
       scal_bet[icv] = CIR[1][0];
@@ -791,6 +788,7 @@ public:
     CL    = getDoubleParam("CL",    "0.23");
 
     LIMIT_PK     = getIntParam("LIMIT_PK",     "0");
+    LIMIT_TL     = getIntParam("LIMIT_TL",     "1");
     VEL_SCALE    = getIntParam("VEL_SCALE",    "0");
     RIJ_BASED_PK = getIntParam("RIJ_BASED_PK", "0");
 
@@ -818,6 +816,7 @@ public:
     turbTS = NULL;       registerScalar(turbTS, "turbTS", CV_DATA);
     turbLS = NULL;       registerScalar(turbLS, "turbLS", CV_DATA);
     muT    = NULL;       registerScalar(muT,    "muT",    CV_DATA);
+
     tturb  = NULL;       registerScalar(tturb, "tturb", CV_DATA);
     tkol   = NULL;       registerScalar(tkol, "tkol", CV_DATA);
     trel   = NULL;       registerScalar(trel, "trel", CV_DATA);
@@ -838,7 +837,7 @@ public:
 
   double *tturb, *tkol, *trel, *lkol, *lrel, *lturb;
 
-  int LIMIT_PK, VEL_SCALE, RIJ_BASED_PK;
+  int LIMIT_PK, LIMIT_TL, VEL_SCALE, RIJ_BASED_PK;
 
 public:
   virtual void initialHookScalarRansTurbModel()
@@ -865,6 +864,11 @@ public:
       {
       case 0: cout << "    PK limiter: no" << endl; break;
       case 1: cout << "    PK limiter: yes" << endl; break;
+      }
+      switch(LIMIT_TL)
+      {
+      case 0: cout << "    TL limiter: no" << endl; break;
+      case 1: cout << "    TL limiter: yes" << endl; break;
       }
       switch(RIJ_BASED_PK)
       {
@@ -929,7 +933,7 @@ public:
       {
         double nx = vel[icv][0]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
         double ny = vel[icv][1]/sqrt(vel[icv][0]*vel[icv][0]+vel[icv][1]*vel[icv][1]+1.e-12);
-        double fluc_norm = fabs(rij_diag[icv][0]*ny*ny+rij_diag[icv][1]*nx*nx-2*nx*ny*rij_offdiag[icv][0]);
+        double fluc_norm = fabs(rij_diag[icv][0]*ny*ny+rij_diag[icv][1]*nx*nx-2.0*nx*ny*rij_offdiag[icv][0]);
         v2[icv] = min(fluc_norm/rho[icv],2./3.*kine[icv]);
       }
 
@@ -1108,20 +1112,18 @@ public:
     for (int icv = 0; icv < ncv; icv++)
     {
       double nu = calcMuLam(icv)/rho[icv];
-      double TimeScale = max(kine[icv]/eps[icv], 6.0*sqrt(nu/eps[icv]));
-      tturb[icv] = kine[icv]/eps[icv];
-      tkol[icv] = 6.0*sqrt(nu/eps[icv]);
-      trel[icv] = kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
-      bool realizable = true;
-      if (realizable)
-      {
-        double RealScale = kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
-        TimeScale = min(TimeScale, RealScale);
-      }
 
-      turbTS[icv] = TimeScale;
+      double tau    = kine[icv]/eps[icv];
+      double tauKol = 6.0*sqrt(nu/eps[icv]);
+      double tauRel = kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
+
+      switch (LIMIT_TL)
+      {
+      case 0: turbTS[icv] = tau;                         break;
+      case 1: turbTS[icv] = min(max(tau,tauKol),tauRel); break;
+      }
     }
-    updateCvData(turbTS,REPLACE_DATA);
+    updateCvData(turbTS, REPLACE_DATA);
   }
 
   void calcTurbLengthScale()
@@ -1129,24 +1131,18 @@ public:
     for (int icv = 0; icv < ncv; icv++)
     {
       double nu = calcMuLam(icv)/rho[icv];
-      double LengthScale = CL*max(pow(kine[icv],1.5)/eps[icv], CETA*pow(nu,0.75)/pow(eps[icv],0.25));
 
-      lturb[icv] = CL*pow(kine[icv],1.5)/eps[icv];
-      lkol[icv] = CL*CETA*pow(nu,0.75)/pow(eps[icv],0.25);
+      double len    = CL*pow(kine[icv],1.5)/eps[icv];
+      double lenKol = CL*CETA*pow(nu,0.75)/pow(eps[icv],0.25);
+      double lenRel = pow(kine[icv],1.5)/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
 
-      bool realizable = true;
-      if (realizable)
+      switch (LIMIT_TL)
       {
-        double RealScale = pow(kine[icv],1.5)/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
-        LengthScale = min(LengthScale, RealScale);
-        lrel[icv] = RealScale;
+      case 0: turbLS[icv] = len;                         break;
+      case 1: turbLS[icv] = min(max(len,lenKol),lenRel); break;
       }
-
-      turbLS[icv] = LengthScale;
-      // *** alternate turbLS *** //
-      //turbLS[icv] = 0.1;
     }
-    updateCvData(turbLS,REPLACE_DATA);
+    updateCvData(turbLS, REPLACE_DATA);
   }
 
   double getTurbProd(int icv)
@@ -1207,6 +1203,7 @@ public:   // constructors
     CL       = getDoubleParam("CL",       "0.23");
 
     RIJ_BASED_PK = getIntParam("RIJ_BASED_PK", "0");
+    LIMIT_TL     = getIntParam("LIMIT_TL",     "1");
 
     ScalarTranspEq *eq;
     eq = registerScalarTransport("kine", CV_DATA);
@@ -1229,6 +1226,8 @@ public:   // constructors
 
     strMag   = NULL;       registerScalar(strMag, "strMag", CV_DATA);
     diverg   = NULL;       registerScalar(diverg, "diverg", CV_DATA);
+    turbTS   = NULL;       registerScalar(turbTS, "turbTS", CV_DATA);
+    turbLS   = NULL;       registerScalar(turbLS, "turbLS", CV_DATA);
     muT      = NULL;       registerScalar(muT, "muT", CV_DATA);
     wallDist = NULL;       registerScalar(wallDist, "wallDist",  CV_DATA);
 
@@ -1254,7 +1253,7 @@ public:
   double *wallDist;        ///< wall distance
 
   double *tturb, *tkol, *trel, *lkol, *lrel, *lturb;
-  int RIJ_BASED_PK;
+  int LIMIT_TL, RIJ_BASED_PK;
 
   // model constants
   double betaStar, sigma_om, sigma_k, alfa, sigmad0, beta0, cLim;
@@ -1290,6 +1289,11 @@ public:
     if (mpi_rank == 0)
     {
       cout << "ASBM properties" << endl;
+      switch(LIMIT_TL)
+      {
+      case 0: cout << "    TL limiter: no" << endl; break;
+      case 1: cout << "    TL limiter: yes" << endl; break;
+      }
       switch(RIJ_BASED_PK)
       {
       case 0: cout << "    PK based on ASBM stresses: no" << endl; break;
@@ -1566,18 +1570,16 @@ public:
     for (int icv = 0; icv < ncv; icv++)
     {
       double nu = calcMuLam(icv)/rho[icv];
-      tturb[icv] = kine[icv]/(betaStar*omega[icv]);
-      tkol[icv] = 6.0*sqrt(nu/betaStar*kine[icv]*omega[icv]);
-      double TimeScale = max(tturb[icv], tkol[icv])
 
-      bool realizable = true;
-      if (realizable)
+      double tau    = 1.0/(betaStar*omega[icv]);
+      double tauKol = 6.0*sqrt(nu/(betaStar*kine[icv]*omega[icv]));
+      double tauRel = sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
+
+      switch (LIMIT_TL)
       {
-        trel[icv] = sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
-        TimeScale = min(TimeScale, trel[icv]);
+      case 0: turbTS[icv] = tau;                         break;
+      case 1: turbTS[icv] = min(max(tau,tauKol),tauRel); break;
       }
-
-      turbTS[icv] = TimeScale;
     }
     updateCvData(turbTS,REPLACE_DATA);
   }
@@ -1587,20 +1589,16 @@ public:
     for (int icv = 0; icv < ncv; icv++)
     {
       double nu = calcMuLam(icv)/rho[icv];
-      lturb[icv] = CL*pow(kine[icv],0.5)/(betaStar*omega[icv]);
-      lkol[icv] = CL*CETA*pow(nu,0.75)/pow(betaStar*kine[icv]*omega[icv],0.25);
-      double LengthScale = max (lturb[icv], tkol[icv]);
 
-      bool realizable = true;
-      if (realizable)
+      double len    = CL*pow(kine[icv],0.5)/(betaStar*omega[icv]);
+      double lenKol = CL*CETA*pow(nu,0.75)/pow(betaStar*kine[icv]*omega[icv],0.25);
+      double lenRel = pow(kine[icv],0.5)*sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
+
+      switch (LIMIT_TL)
       {
-        lrel[icv] = pow(kine[icv],0.5)*sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
-        LengthScale = min(LengthScale, lrel[icv]);
+      case 0: turbLS[icv] = len;                         break;
+      case 1: turbLS[icv] = min(max(len,lenKol),lenRel); break;
       }
-
-      turbLS[icv] = LengthScale;
-      // *** alternate turbLS *** //
-      //turbLS[icv] = 0.1;
     }
     updateCvData(turbLS,REPLACE_DATA);
   }
@@ -1618,7 +1616,7 @@ public:
       Pk = rij_diag[icv][0]*grad_u[icv][0][0]    + rij_offdiag[icv][0]*grad_u[icv][0][1] + rij_offdiag[icv][1]*grad_u[icv][0][2] +
            rij_offdiag[icv][0]*grad_u[icv][1][0] + rij_diag[icv][1]*grad_u[icv][1][1]    + rij_offdiag[icv][2]*grad_u[icv][1][2] +
            rij_offdiag[icv][1]*grad_u[icv][2][0] + rij_offdiag[icv][2]*grad_u[icv][2][1] + rij_diag[icv][2]*grad_u[icv][2][2];
-      Pk = min(Pk, 20.0*betaStar*rho[icv]*omega[icv]*kine[icv])
+      Pk = min(Pk, 20.0*betaStar*rho[icv]*omega[icv]*kine[icv]);
       break;
     }
 
