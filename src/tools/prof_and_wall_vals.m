@@ -92,7 +92,7 @@ Data = importdata(file);
 % Spatial locations
 XY = Data(:,1:2);
 
-% Count number of columns in i
+% Compute imax (dimension in y direction)
 sortedXY = sortrows(XY,[1 2]);
 imax = 1;
 val = sortedXY(1,2);
@@ -100,6 +100,7 @@ while sortedXY(imax+1,2) > val
     imax = imax+1;
 end
 
+% Compute jmax (dimension in x direction)
 jmax = size(Data,1) / imax;
 
 % Sort in X

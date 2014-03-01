@@ -18,7 +18,6 @@
 
 
 
-
 // ###########################################################################################
 // ------                                                                               ------
 // ------                    Vanilla version of joe called MyJoe                        ------
@@ -55,7 +54,7 @@ public:
     MPI_Allreduce(&my_wall_faces, &tot_wall_faces, 1, MPI_INT, MPI_SUM, mpi_comm);
 
     // write to file in tecplot format
-    FILE *fp;
+      FILE *fp;
     char fname[200];
     sprintf(fname, "%s.dat", name.c_str());
     if ( mpi_rank == 0 )
@@ -164,9 +163,9 @@ public:
       for (ScalarTranspEqIterator data = scalarTranspEqVector.begin(); data < scalarTranspEqVector.end(); data++)
         fprintf(fp, "%.12le\t", data->phi[icv]);
 
-      fprintf(fp, "%.12le\t", InterpolateAtCellCenterFromFaceValues(mul_fa, icv));
+      //fprintf(fp, "%.12le\t", InterpolateAtCellCenterFromFaceValues(mul_fa, icv));
 
-      fprintf(fp, "%.12le\t", grad_u[icv][0][1]);
+      //fprintf(fp, "%.12le\t", grad_u[icv][0][1]);
 
       double *muT = getR1("muT");
       fprintf(fp, "%.12le\t", muT[icv]);

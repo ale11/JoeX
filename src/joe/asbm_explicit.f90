@@ -70,7 +70,6 @@
     logical                  :: converged     !used for N-R solver
     
     real(dp), dimension(3,3) :: a             !eddy axis tensor
-    real(dp), dimension(3,3) :: as_old        !input value for as
     real(dp), dimension(3,3) :: ar_old        !input value for ar
     real(dp), dimension(3,3) :: wtt           !frame + mean rotation
     real(dp), dimension(3,3) :: stst          !st_ik*st_kj
@@ -201,12 +200,13 @@
       norm_wt  = zero
     end if
 
+    ! --------------------------------------------------------------------------
     ! COMPUTE AS
+    ! --------------------------------------------------------------------------
     ! check for strain
     purestrain: if (strain) then      
-      ! reuse as and store original tensor
+      ! for initial guess use as
       a = as
-      as_old = as
 
       ! loop point for Newton-Rhapson (N-R) iteration
       converged = .false.
@@ -221,8 +221,8 @@
               if (mod(ktr,40) == 0) then
                 a(i,j) = 0.5_dp*a(i,j)
               else if (mod(ktr,200) == 0) then
-                a(i,j) = a(i,j) + as_old(i,j)
-              else 
+                a(i,j) = a(i,j) + as(i,j)
+              else
                 a(i,j) = 2.0_dp*a(i,j)
               end if
             end do
@@ -244,10 +244,10 @@
           ! proper value
           mag_ststa = sqrt(a01**2 + trace_ststa)
         else
-          ! flase value to deal with numberical problems
+          ! false value to deal with numerical problems
           mag_ststa = sqrt(trace_stst)
         end if
-        den_as = a0 + 2*mag_ststa
+        den_as = a0 + 2.0_dp*mag_ststa
        
         ! compute matrix and rhs for as perturbation
         do i = 1,3
@@ -255,7 +255,7 @@
             ! terms in the as(i,j) equations
             id = index(i,j)
 
-            num_as = - twoth*trace_sta*delta(i,j)
+            num_as = -twoth*trace_sta*delta(i,j)
             do k = 1,3
               num_as = num_as + st(i,k)*a(k,j) + st(j,k)*a(k,i)
             end do
@@ -335,71 +335,27 @@
     ! update as
     as = a
 
+    ! --------------------------------------------------------------------------
     ! COMPUTE AR
+    ! --------------------------------------------------------------------------
     ! check for rotation
     purerotation: if (rotation) then
-      ! reuse ar and store original tensor
-      a = ar
-      ar_old = ar
-     
-      ! loop point for Newton-Rhapson (N-R) iteration
-      converged = .false.
-      ktr = 0
-      
-      NewtonRhapson_ar: do while (.not.converged)
-        ktr = ktr + 1
-        ! perturbations
-        if (mod(ktr,20) == 0) then
-          do i = 1,3
-            do j = 1,3
-              if (mod(ktr,40) == 0) then
-                a(i,j) = 0.5_dp*a(i,j)
-              else if (mod(ktr,200) == 0) then
-                a(i,j) = a(i,j) + ar_old(i,j)
-              else 
-                a(i,j) = 2.0_dp*a(i,j)
-              end if
-            end do
-          end do
-        end if
 
-        ! compute rotation parameters
-        trace_wtsta = zero
-        trace_ststa = zero
-        do i = 1,3
-          do j = 1,3
-            trace_wtsta = trace_wtsta + a(i,j)*wtst(j,i)
-            trace_ststa = trace_ststa + stst(i,j)*a(j,i)
-          end do
-        end do
+        r_ratio = trace_wtwt/trace_stst
 
-        if (ktr == 1) then
-          ! relative rotation parameter for first trial
-          r_ratio = one
-        else
-          ! relative rotation parameter for following trials
-          r_ratio = trace_wtsta/trace_ststa      
-          if (abs(r_ratio) < r_small) exit
-        end if
-        r_abs = abs(r_ratio)
-       
         ! compute alpha and beta
-        if (r_abs < one) then
-          ! hyperbolic mean flow
-          aroot = sqrt(one - r_abs)
-          alpha2 = one - aroot
+        if (r_ratio < one) then
+          alpha2 = one - sqrt(one - r_ratio)     !hyperbolic mean flow
         else
-          ! elliptic mean flow
-          aroot = sqrt(one - one/r_abs)
-          alpha2 = one + aroot
+          alpha2 = one + sqrt(one - one/r_ratio) !elliptic mean flow
         end if
+
         if (alpha2 < zero) alpha2 = zero
         alpha = sqrt(alpha2)
         
         term = 4.0_dp - 2.0_dp*alpha2
         if (term < zero) term = zero
-        broot = sqrt(term)
-        beta = 2.0_dp - broot
+        beta = 2.0_dp - sqrt(term)
 
         c2 = alpha/norm_wt
         c3 = beta/trace_wtwt
@@ -411,169 +367,29 @@
           end do
         end do
 
-        ! compute initial x_nr
+        ! compute ar
         do i = 1,3
           do j = i,3
-            id = index(i,j)
-            x_nr(id) = zero
 
+            a(i,j) = zero
             do k = 1,3
               do l = 1,3
-                x_nr(id) = x_nr(id) + h(i,k)*h(j,l)*as(k,l)
+                a(i,j) = a(i,j) + h(i,k)*h(j,l)*as(k,l)
               end do
             end do
 
+            a(j,i) = a(i,j)
           end do
         end do
-       
-        ! solution for first trial
-        if (ktr == 1) then
-          do i = 1,3
-            do j = i,3
-              id = index(i,j)
-              ! first pass solution
-              a(i,j) = x_nr(id)
-              a(j,i) = a(i,j)
-            end do
-          end do
-          ! done for the first trial
-          cycle
-        end if
-
-        ! coefficients in the a_nr matrix 
-        coefa = fourth/(aroot*alpha*norm_wt)
-        coefb = half/(aroot*broot*trace_wtwt)
-        
-        if (r_abs < one) then
-          coefa = coefa*r_ratio
-          coefb = coefb*r_ratio
-        else
-          coefa = coefa/r_ratio
-          coefb = coefb/r_ratio
-        end if
-
-        ! p(k,l) for nr calculation
-        do k = 1,3
-          do l = 1,3
-            p(k,l) = wtst(k,l)/trace_wtsta - stst(k,l)/trace_ststa
-          end do
-        end do    
-
-        ! finish x_nr and compute a_nr
-        do i = 1,3
-          do j = i,3
-            id = index(i,j)
-            x_nr(id) = x_nr(id) - a(i,j)
-              
-            ! initialize row in the matrix 
-            do k = 1,6
-              a_nr(id,k) = zero
-            end do
-            a_nr(id,id) = one
-              
-            ! coefficient of the p(m,n) for this i,j
-            coefp = zero
-            do k = 1,3
-              do l = 1,3
-                coefp = coefp + ((coefa*wt(i,k) + coefb*wtwt(i,k))*h(j,l) +    &
-                                 (coefa*wt(j,l) + coefb*wtwt(j,l))*h(i,k))*    &
-                                as(k,l)
-              end do
-            end do
-
-            do n = 1,3
-              do m = 1,3
-                idx = index(n,m)
-                a_nr(id,idx) = a_nr(id,idx) - coefp*p(m,n)
-              end do
-            end do
-   
-            ! row for i,j complete
-          end do
-        end do
-
-        ! solve the system
-        call linsolver(6,a_nr,x_nr,6,ierr)
-        if (ierr /= 0) then
-          ierr = 3
-          return
-        end if
-
-        ! compute the corrected solution
-        ! The following attempts to limit the size of the correction.
-        ! Min norm for aij should be same as the identity matrix.
-        ! Using it here as a basis for max size. No real meaning. Could 
-        ! use 0.1 too.
-
-        ! check size
-        norm_x_nr = x_nr(1)**2 + x_nr(4)**2 + x_nr(6)**2 +                     &
-                 2*(x_nr(2)**2 + x_nr(3)**2 + x_nr(5)**2)
-        if (norm_x_nr > third) then
-          do i = 1,6
-            x_nr(i) = third*x_nr(i)/sqrt(norm_x_nr)
-          end do
-        end if
-
-        ! check numerator of r_ratio
-        r_num = -one
-        do while (r_num < zero)
-          r_num = zero
-          
-          do i = 1,3
-            do j = 1,3 
-              id = index(i,j)
-              r_num = r_num + (a(i,j) + x_nr(id))*wtst(j,i)
-            end do
-          end do
-          
-          if (r_num < zero) then
-            r_num = zero
-            ! trying to reduce x depending on the flow. Arbitrary
-            min_sw_ws = min( (trace_stst/trace_wtwt),(trace_wtwt/trace_stst) ) &
-                        **fifth   
-            do i = 1,6
-              x_nr(i) = min_sw_ws*x_nr(i)
-            end do
-          end if
-
-        end do
-       
-        ! compute the corrected solution
-        do i = 1,3
-          do j = 1,3
-            id = index(i,j)
-            a(i,j) = a(i,j) + x_nr(id)
-          end do
-        end do
-
-        ! check convergence
-        converged = .true.
-
-        do i = 1,6
-          if (abs(x_nr(i)) > a_error) converged = .false.
-        end do
-
-        if (ktr == ktrmax) then
-          converged = .true.
-          ierr = 4
-          ! do not return when this error occurs
-          write(*,*) 'asbm error, ierr = ', ierr
-        end if
-
-      end do NewtonRhapson_ar
-      
-      ! check that r_ratio is not negative
-      if (r_ratio < -zero) then
-        ierr = 5
-        return
-      end if
 
     end if purerotation
 
     ! update ar
     ar = a
 
+    ! --------------------------------------------------------------------------
     ! COMPUTE STRUTURE SCALARS
+    ! --------------------------------------------------------------------------
     trace_wttwtt = zero
     trace_ststa  = zero
     trace_aa     = zero
@@ -748,7 +564,9 @@
       end do
     end if
 
+    ! --------------------------------------------------------------------------
     ! COMPUTE STRUCTURE TENSORS
+    ! --------------------------------------------------------------------------
     call structure(rey, dmn, cir, a, phi, chi, vec_g, vec_wdt,                 &
                    dot_vec_wdt, rotation_t, delta, eps, ierr)
 
@@ -770,9 +588,9 @@
     cir(2,2) = eta_f
     cir(2,3) = trace_aa
     
-    cir(3,1) = hat_wt
-    cir(3,2) = hat_st
-    cir(3,3) = trace_ststa
+    cir(3,1) = vec_g(1)
+    cir(3,2) = vec_g(2)
+    cir(3,3) = vec_g(3)
   end subroutine asbm
 
 !=============================== INT_ER_LT_ONE ===============================80
@@ -839,7 +657,7 @@
     phis = phi0 + (phi1 - phi0)*                                               &
                   (0.82_dp*eta_r**two)/(one - (one-0.82_dp)*eta_r**two)
     bets = bet0 + (bet1 - bet0)*eta_r**two
-    chis = chi0 + (chi1 - chi0)*eta_r*two
+    chis = chi0 + (chi1 - chi0)*eta_r**two
   
   end subroutine int_er_lt_one
 
@@ -923,8 +741,9 @@
       chi1 = fifth*bet1
     else if (eta_f < one) then
       phi1 = one - eta_f
-      chi1 = fifth + (one - fifth)*                                            &
-             (one - (one - eta_f)**2/(one + 3.0_dp*eta_f/oma))
+      chi1 = zero
+      !chi1 = fifth + (one - fifth)*                                            &
+      !       (one - (one - eta_f)**2/(one + 3.0_dp*eta_f/oma))
       bet1 = one
     else
       phi1 = (eta_f - one)/(3.0_dp*eta_f - one)
@@ -1016,7 +835,7 @@
     real(dp), dimension(3,3) :: h          !partial projection operator
     real(dp)                 :: d2         !normalizing factor
     real(dp)                 :: dinv       !one over sqrt(d2)
-    real(dp)                 :: sum
+    real(dp)                 :: suma
 
     continue
 
@@ -1034,13 +853,13 @@
     ah = a
 
     ! compute normalizing factor
-    sum = zero
+    suma = zero
     do i = 1,3
       do j = 1,3
-        sum = sum + ah(i,j)*bl(i,j)
+        suma = suma + ah(i,j)*bl(i,j)
       end do
     end do
-    d2 = one - (2.0_dp - trace_bl)*sum
+    d2 = one - (2.0_dp - trace_bl)*suma
     if (d2 < zero) return
     dinv = one/sqrt(d2);
 
@@ -1110,25 +929,25 @@
     real(dp)                 :: trace_afl      !a_in*fl_ni
     real(dp)                 :: coef_1, coef_2, coef_3, coef_4, coef_5
     real(dp)                 :: term
-    real(dp)                 :: sum, sumi, sumj, sumk, sumg
+    real(dp)                 :: suma, sumi, sumj, sumk, sumg
 
     continue
     
     ! compute axisymmetric tensors
     do i = 1,3
       do j = i,3
-        rey(i,j) = half*(1 - phi)*(delta(i,j) - a(i,j)) + phi*a(i,j)
+        rey(i,j) = half*(one - phi)*(delta(i,j) - a(i,j)) + phi*a(i,j)
         dmn(i,j) = half*(delta(i,j) - a(i,j))
 
         ! check for stropholysis
         if (rotation_t) then
           sumg = zero
           do k = 1,3
-            sum = zero
+            suma = zero
             do l = 1,3
-              sum = sum + eps(k,l,i)*a(l,j) + eps(k,l,j)*a(l,i)
+              suma = suma + eps(k,l,i)*a(l,j) + eps(k,l,j)*a(l,i)
             end do
-            sumg = sumg + half*vec_g(k)*sum
+            sumg = sumg + half*vec_g(k)*suma
           end do
           rey(i,j) = rey(i,j) + sumg
         end if
