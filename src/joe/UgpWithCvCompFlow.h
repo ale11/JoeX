@@ -123,6 +123,8 @@ public:   // constructors/destructors
     rij_diag        = NULL;     registerVector(rij_diag,        "rij_diag",        CV_DATA);
     rij_offdiag     = NULL;     registerVector(rij_offdiag,     "rij_offdiag",     CV_DATA);
 
+    viscFlux        = NULL;     registerVector(viscFlux, "viscFlux", CV_DATA);
+
     // just to take a look at the residual fields
     residField  = NULL;     registerScalar(residField,  "residField",  CV_DATA);
 
@@ -662,6 +664,8 @@ public:   // member variables
   double (*rij_diag)[3];       ///< diagonal Reynolds stresses at cel center
   double (*rij_offdiag)[3];    ///< off diagonal Reynolds stresses at cel center
 
+  double (*viscFlux)[3];
+
   double *massFlux_fa;      ///< mass flux for scalar solver
 
   double *residField;       ///< residual field for mean flow
@@ -1186,7 +1190,7 @@ public:   // member functions
       const double rho0, const double *u0, const double (&grad_u0)[3][3], const double h0, const double *grad_h0, const double T0, const double R0, const double gam0, const double kine0,
       const double rho1, const double *u1, const double (&grad_u1)[3][3], const double h1, const double *grad_h1, const double T1, const double R1, const double gam1, const double kine1,
       const double nonL, const double *rij_d, const double *rij_offd, const double mul, const double mut, const double lambdaOverCp, const double kine_fa, const double *u_fa,
-      const double area, const double *nVec, const double smag, const double *sVec);
+      const double area, const double *nVec, const double smag, const double *sVec, double &test1, double &test2, double &test3);
   
   
  
@@ -1269,7 +1273,7 @@ public:   // member functions
       const double rho0, const double *u0, const double (&grad_u0)[3][3], const double h0, const double *grad_h0, const double T0, const double R0, const double gam0, const double *Scal0, const double (*gradScal0)[3], const double *dpress_dscal0, const double kine0,
       const double rho1, const double *u1, const double (&grad_u1)[3][3], const double h1, const double *grad_h1, const double T1, const double R1, const double gam1, const double *Scal1, const double (*gradScal1)[3], const double *dpress_dscal1, const double kine1,
       const double nonL, const double *rij_d, const double *rij_offd, const double mul, const double mut, const double lambdaOverCp, const double kine_fa, const double *u_fa, const double *diff, const double *DiffTerm,
-      const double area, const double *nVec, const double smag, const double *sVec, const double alpha, const int nScal);
+      const double area, const double *nVec, const double smag, const double *sVec, const double alpha, const int nScal, double &temp1, double &temp2, double &temp3);
   
   /**
    *  interpolate Reynolds stresses to faces

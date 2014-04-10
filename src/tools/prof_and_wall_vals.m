@@ -162,11 +162,11 @@ for j = 1:jmax
             turb2(j,i,1) = temp(i,8);
             muLam(j,i,1) = temp(i,9);
             dudy(j,i,1)  = temp(i,10);
-            muT(j,i,1)   = temp(i,11);
-            uu(j,i)      = temp(i,12);
-            vv(j,i)      = temp(i,13);
-            ww(j,i)      = temp(i,14);
-            uv(j,i)      = temp(i,15);
+            muT(j,i,1)   = temp(i,9);
+            uu(j,i)      = temp(i,10);
+            vv(j,i)      = temp(i,11);
+            ww(j,i)      = temp(i,12);
+            uv(j,i)      = temp(i,13);
             
         elseif strcmp(model, 'v2f')
             

@@ -3,8 +3,7 @@
 ! Computes the Reynolds stresses using the Algebraic Structure-based Model. 
 ! On return:
 !   ierr = 0 ok
-!   ierr = 1 linear solver for AS failed
-!   ierr = 2 AS could not be solved in ktr iterations
+!   ierr = 1 error for AS implicit eq. too large
 !   ierr = 3 linear solver for AR failed
 !   ierr = 4 AR could not be solved in ktr iterations
 !   ierr = 5 negative r_ratio
@@ -19,7 +18,7 @@
     integer, parameter  :: dp = selected_real_kind(15, 307) !double precision
 
     ! INITIAL DECLARATIONS
-    ! routine's inputs and outputs
+    ! Routine's inputs and outputs
     real(dp), dimension(3,3), intent(in)    :: st  !(Rate of strain)*timescale
     real(dp), dimension(3,3), intent(in)    :: wt  !(Mean rotation)*timescale
     real(dp), dimension(3,3), intent(in)    :: wft !(Frame rotation)*timescale
@@ -36,18 +35,20 @@
     integer, intent(inout)                  :: ierr    !error flag
  
 
-    ! constants
-    real(dp), parameter                     :: a0 = 1.4_dp
+    ! Constants
+    real(dp), parameter                     :: a0 = 2.5_dp
     real(dp), parameter                     :: a01 = (2.1_dp - a0) / 2.0_dp
+    real(dp), parameter                     :: pi = 3.14159265359_dp
 
     real(dp), parameter                     :: zero = 0.0_dp
-    real(dp), parameter                     :: small = 1.0e-03_dp
+    real(dp), parameter                     :: small = 1.0e-06_dp
     real(dp), parameter                     :: fifth = 0.2_dp
     real(dp), parameter                     :: fourth = 0.25_dp
     real(dp), parameter                     :: third = 1.0_dp / 3.0_dp
     real(dp), parameter                     :: half = 0.5_dp
     real(dp), parameter                     :: twoth = 2.0_dp*third
     real(dp), parameter                     :: one = 1.0_dp
+    real(dp), parameter                     :: two = 2.0_dp
     real(dp), parameter, dimension(3,3)     :: delta =                         &
          reshape((/1., 0., 0., 0., 1., 0., 0., 0., 1./),(/3,3/))
     real(dp), parameter, dimension(3,3,3)   :: eps =                           &
@@ -57,7 +58,7 @@
     real(dp), parameter                     :: a_error = 1.0e-10_dp
     real(dp), parameter                     :: r_small = 1.0e-14_dp
     
-    ! variables
+    ! Variables
     integer                  :: i,j,k,l,m,n   !do loop indices
     integer                  :: ktr           !iteration index for N-R
     integer                  :: id, idx       !indeces for N-R vector & matrix   
@@ -94,28 +95,33 @@
     real(dp)                 :: dot_vec_wdt   !dot product of vec_wdt
     real(dp)                 :: mag_vec_wtt   !magnitude of vec_wtt
 
-    real(dp)                 :: num_as        !numerator for as equation
-    real(dp)                 :: den_as        !denominator for as equation
-    real(dp), dimension(6)   :: x_nr          !rhs and solution for N-R
-    real(dp), dimension(6,6) :: a_nr          !matrix for N-R
+    ! variables for the strained-only eddy-axis tensor
+    real(dp)                 :: i2, i3        !first and second invariant of st
+    real(dp)                 :: na,nb,nc,nd   !coefficients for N equation
+    real(dp)                 :: ndelta        !discriminant for N equation
+    real(dp)                 :: ndelta0       !variable for N equation
+    real(dp)                 :: ndelta1       !variable for N equation
+    real(dp)                 :: p1, p2        !variables for N equation
+    real(dp)                 :: nbig          !N (production/dissipation)
+    real(dp)                 :: as_alpha      !part of denom. for as coeff's
+    real(dp)                 :: as_a          !coeff for as
+    real(dp)                 :: as_b          !coeff for as
+    real(dp)                 :: as_c          !coeff for as
+    real(dp), dimension(3,3) :: sta           !st_ik*a_kj
+    real(dp), dimension(3,3) :: error         !error for as
+    real(dp)                 :: norm_error    !norm of the error
+
+    ! variables for the rotated eddy-axis tensor
     real(dp)                 :: r_ratio       !wt_qr*st_rp*a_pq/st_kn*st_nm*a_mk
-    real(dp)                 :: r_abs         !abs(r_ratio)
-    real(dp)                 :: r_num         !numerator of r_ratio
     real(dp)                 :: alpha         !2nd coeff for rot matrix H
     real(dp)                 :: beta          !3rd coeff for rot matrix H
     real(dp)                 :: alpha2        !alpha squared
-    real(dp)                 :: aroot, broot  !needed for alpha & beta
     real(dp)                 :: term          !needed for beta
     real(dp)                 :: c2            !normalized 2nd coeff for H
     real(dp)                 :: c3            !normalized 3rd coeff for H
-    real(dp)                 :: coefa
-    real(dp)                 :: coefb
-    real(dp)                 :: coefp
     real(dp), dimension(3,3) :: h             !rotation matrix H
-    real(dp), dimension(3,3) :: p
-    real(dp)                 :: norm_x_nr     !norm of x_nr
-    real(dp)                 :: min_sw_ws     !min(strain/rot, rot/strain)
 
+    ! variables for the structure  scalars
     real(dp)                 :: hat_wt        !-a_ij*wt_ik*wt_kj
     real(dp)                 :: hat_wtt       !-a_ij*wTt_ik*wTt_kj  
     real(dp)                 :: hat_st        !a_ij*st_ik*st_kj
@@ -150,9 +156,6 @@
     ! INITIALIZE AND CALCULATE TENSOR PRODUCTS
     ierr = 0
     
-    trace_stst = zero
-    trace_wtwt = zero
-    
     ! initialize default value for A
     a(1,1) = third
     a(2,1) = zero
@@ -169,7 +172,10 @@
     ! tensor products
     stst = zero
     wtwt = zero
-    wtst = zero    
+    wtst = zero
+
+    trace_stst = zero
+    trace_wtwt = zero   
   
     do i = 1,3
       do j = 1,3
@@ -205,130 +211,77 @@
     ! --------------------------------------------------------------------------
     ! check for strain
     purestrain: if (strain) then      
-      ! for initial guess use as
-      a = as
+      ! invariants
+      i2 = -half*trace_stst
+      i3 = zero
+      do i = 1,3
+         do j = 1,3
+            i3 = i3 + stst(i,j)*st(j,i)
+         end do
+      end do
+      i3 = third*i3
 
-      ! loop point for Newton-Rhapson (N-R) iteration
-      converged = .false.
-      ktr = 0
+      ! compute N 
+      na = 3.0_dp
+      nb = -3.0_dp*a0
+      nc = 12.0_dp*i2
+      nd = -(4.0_dp*a0*i2 + 24.0_dp*i3)
 
-      NewtonRhapson_as: do while (.not.converged)
-        ktr = ktr + 1
-        ! perturbations
-        if (mod(ktr,20) == 0) then
-          do i = 1,3
-            do j = 1,3
-              if (mod(ktr,40) == 0) then
-                a(i,j) = 0.5_dp*a(i,j)
-              else if (mod(ktr,200) == 0) then
-                a(i,j) = a(i,j) + as(i,j)
-              else
-                a(i,j) = 2.0_dp*a(i,j)
-              end if
-            end do
-          end do
-        end if
+      ndelta = 18.0_dp*na*nb*nc*nd - 4.0_dp*nb**3.0_dp*nd + nb**two*nc**two     &
+               - 4.0_dp*na*nc**3.0_dp - 27.0_dp*na**two*nd**two
+      ndelta0 = nb**two - 3.0_dp*na*nc
+      ndelta1 = two*nb**3.0_dp - 9.0_dp*na*nb*nc + 27.0_dp*na**two*nd
 
-        ! invariants
-        trace_sta = zero
-        trace_ststa = zero
-        do i = 1,3
-          do j = 1,3
-            trace_sta = trace_sta + st(i,j)*a(j,i)
-            trace_ststa = trace_ststa + stst(i,j)*a(j,i)
-          end do
-        end do
+      p1 = half*ndelta1
+      p2 = half*3.0_dp*na*sqrt(3.0_dp*abs(ndelta))
 
-        ! denominator
-        if (trace_ststa > zero) then
-          ! proper value
-          mag_ststa = sqrt(a01**2 + trace_ststa)
-        else
-          ! false value to deal with numerical problems
-          mag_ststa = sqrt(trace_stst)
-        end if
-        den_as = a0 + 2.0_dp*mag_ststa
-       
-        ! compute matrix and rhs for as perturbation
-        do i = 1,3
-          do j = i,3
-            ! terms in the as(i,j) equations
-            id = index(i,j)
+      nbig = nb
+      if (ndelta <= zero) then
+        nbig = nbig + (p1 + p2)**(third) + ndelta0*(p1 + p2)**(-third)
+      else
+        nbig = nbig + two*(p1*p1 + p2*p2)**(1.0_dp/6.0_dp)*                     &
+               cos(third*acos(p1/sqrt(p1*p1 + p2*p2)) + twoth*pi)
+      end if
+      nbig = -third*nbig/na
 
-            num_as = -twoth*trace_sta*delta(i,j)
-            do k = 1,3
-              num_as = num_as + st(i,k)*a(k,j) + st(j,k)*a(k,i)
-            end do
+      ! compute as
+      as_alpha = 3.0_dp*nbig**two + 4.0_dp*i2
 
-            ! right hand side of equation for perturbation in as(i,j)
-            x_nr(id) = -a(i,j) + third*delta(i,j) + num_as/den_as
+      as_a = 8.0_dp*i2/(3.0_dp*as_alpha)
+      as_b = two*nbig/as_alpha
+      as_c = 4.0_dp/as_alpha
 
-            ! initialize row in the matrix am
-            do k = 1,6
-              a_nr(id,k) = zero
-            end do
-            a_nr(id,id) = one
+      a = as_a*delta + as_b*st + as_c*stst
 
-            ! terms for tensor
-            do k = 1,3
-              idx = index(k,j)
-              a_nr(id,idx) = a_nr(id,idx) - st(i,k)/den_as
-              idx = index(k,i)
-              a_nr(id,idx) = a_nr(id,idx) - st(j,k)/den_as
-            end do
-
-            ! terms from deltas
-            if (i == j) then
-              do n = 1,3
-                do m = 1,3
-                  idx = index(n,m)
-                  a_nr(id,idx) = a_nr(id,idx) + twoth*st(m,n)/den_as
-                end do
-              end do
-            end if
-
-            ! term from denominator (a1 = 2)
-            do n = 1,3
-              do m = 1,3
-                idx = index(n,m)
-                a_nr(id,idx) = a_nr(id,idx) +                                  &
-                   num_as/den_as*stst(n,m)/(mag_ststa*den_as)
-              end do
-            end do
-             
-            ! row for i,j complete
+      ! check accuracy of solution
+      sta = zero
+      trace_sta = zero
+      do i = 1,3
+        do j = 1,3
+          do k = 1,3
+            sta(i,j) = sta(i,j) + st(i,k)*a(k,j)
           end do
         end do
-        
-        ! solve the system
-        call linsolver(6,a_nr,x_nr,6,ierr)
-        if (ierr /= 0) then
-          ierr = 1
-          return
-        endif
+        trace_sta = trace_sta + sta(i,i)
+      end do
 
-        ! compute the corrected solution
-        do i = 1,3
-          do j = 1,3
-            id = index(i,j)
-            a(i,j) = a(i,j) + x_nr(id)
-          end do
+      do i = 1,3
+        do j = 1,3
+          error(i,j) = a(i,j)*nbig -                                            &
+                       (sta(i,j) + sta(j,i) - twoth*trace_sta*delta(i,j)) -     &
+                       twoth*st(i,j)
         end do
+      end do
 
-        ! check convergence
-        converged = .true.
+      norm_error = error(1,1)**2 + error(1,2)**2 + error(1,3)**2 +              &
+                   error(2,1)**2 + error(2,2)**2 + error(2,3)**2 +              &
+                   error(3,1)**2 + error(3,2)**2 + error(3,3)**2
+      if (norm_error > small) then
+        ierr = 1
+      end if
 
-        do i = 1,6
-          if (abs(x_nr(i)) > a_error) converged = .false.        
-        end do
-
-        if (ktr == ktrmax) then
-          converged = .true.
-          ierr = 2
-          return
-        end if
-
-      end do NewtonRhapson_as
+      ! total strained-only eddy axis tensor  
+      a = third*delta + a
 
     end if purestrain
 
@@ -340,67 +293,22 @@
     ! --------------------------------------------------------------------------
     ! check for rotation
     purerotation: if (rotation) then
-      ! for initial guess use ar
-      a = ar
-     
-      ! loop point for Newton-Rhapson (N-R) iteration
-      converged = .false.
-      ktr = 0
-      
-      NewtonRhapson_ar: do while (.not.converged)
-        ktr = ktr + 1
-        ! perturbations
-        if (mod(ktr,20) == 0) then
-          do i = 1,3
-            do j = 1,3
-              if (mod(ktr,40) == 0) then
-                a(i,j) = 0.5_dp*a(i,j)
-              else if (mod(ktr,200) == 0) then
-                a(i,j) = a(i,j) + ar(i,j)
-              else
-                a(i,j) = 2.0_dp*a(i,j)
-              end if
-            end do
-          end do
-        end if
 
-        ! compute rotation parameters
-        trace_wtsta = zero
-        trace_ststa = zero
-        do i = 1,3
-          do j = 1,3
-            trace_wtsta = trace_wtsta + wtst(i,j)*a(j,i)
-            trace_ststa = trace_ststa + stst(i,j)*a(j,i)
-          end do
-        end do
+        r_ratio = trace_wtwt/trace_stst
 
-        if (ktr == 1) then
-          ! relative rotation parameter for first trial
-          r_ratio = one
-        else
-          ! relative rotation parameter for following trials
-          r_ratio = trace_wtsta/trace_ststa      
-          if (abs(r_ratio) < r_small) exit
-        end if
-        r_abs = abs(r_ratio)
-       
         ! compute alpha and beta
-        if (r_abs < one) then
-          ! hyperbolic mean flow
-          aroot = sqrt(one - r_abs)
-          alpha2 = one - aroot
+        if (r_ratio < one) then
+          alpha2 = one - sqrt(one - r_ratio)     !hyperbolic mean flow
         else
-          ! elliptic mean flow
-          aroot = sqrt(one - one/r_abs)
-          alpha2 = one + aroot
+          alpha2 = one + sqrt(one - one/r_ratio) !elliptic mean flow
         end if
+
         if (alpha2 < zero) alpha2 = zero
         alpha = sqrt(alpha2)
         
         term = 4.0_dp - 2.0_dp*alpha2
         if (term < zero) term = zero
-        broot = sqrt(term)
-        beta = 2.0_dp - broot
+        beta = 2.0_dp - sqrt(term)
 
         c2 = alpha/norm_wt
         c3 = beta/trace_wtwt
@@ -412,175 +320,20 @@
           end do
         end do
 
-        ! compute initial x_nr
+        ! compute ar
         do i = 1,3
           do j = i,3
-            id = index(i,j)
-            x_nr(id) = zero
 
+            a(i,j) = zero
             do k = 1,3
               do l = 1,3
-                x_nr(id) = x_nr(id) + h(i,k)*h(j,l)*as(k,l)
+                a(i,j) = a(i,j) + h(i,k)*h(j,l)*as(k,l)
               end do
             end do
 
+            a(j,i) = a(i,j)
           end do
         end do
-       
-        ! solution for first trial
-        if (ktr == 1) then
-          do i = 1,3
-            do j = i,3
-              id = index(i,j)
-              ! first pass solution
-              a(i,j) = x_nr(id)
-              a(j,i) = a(i,j)
-            end do
-          end do
-          ! done for the first trial
-          cycle
-        end if
-
-        ! components of Newton matrix
-        ! f(a) = a - H_ik*H_jl* as_kl
-        !          d(f)                  d(H_ik)*H_jl + d(H_jl)*H_ik
-        ! coefp = ----- = 1(on diag) - ( -------        -------      )*as_kl
-        !          d(a)                   d(a)           d(a)
-        ! coefa = d(alpha)     1
-        !         -------- * ------
-        !           d(a)     norm_wt
-        ! coefb = d(beta)        1
-        !         -------- * ---------
-        !           d(a)    trace_wtwt
-        ! where neither coefa, coefb include the p(k,l) term:
-        ! d(r_ratio)
-        ! ---------  = r*p(k,l)
-        !     da
-        coefa = fourth/(aroot*alpha*norm_wt)
-        coefb = half/(aroot*broot*trace_wtwt)
-
-        if (r_abs < one) then
-          coefa = coefa*r_ratio
-          coefb = coefb*r_ratio
-        else
-          coefa = coefa/r_ratio
-          coefb = coefb/r_ratio
-        end if
-
-        ! p(k,l) for nr calculation
-        do k = 1,3
-          do l = 1,3
-            p(k,l) = wtst(k,l)/trace_wtsta - stst(k,l)/trace_ststa
-          end do
-        end do    
-
-        ! finish x_nr and compute a_nr
-        do i = 1,3
-          do j = i,3
-            id = index(i,j)
-            x_nr(id) = x_nr(id) - a(i,j) !x_nr = -f(a_ij)
-              
-            ! initialize row in the matrix 
-            do k = 1,6
-              a_nr(id,k) = zero
-            end do
-            a_nr(id,id) = one
-
-            coefp = zero
-            do k = 1,3
-              do l = 1,3
-                coefp = coefp + ((coefa*wt(i,k) + coefb*wtwt(i,k))*h(j,l) +   &
-                                 (coefa*wt(j,l) + coefb*wtwt(j,l))*h(i,k))*   &
-                                as(k,l)
-              end do
-            end do
-
-            do n = 1,3
-              do m = 1,3
-                idx = index(n,m)
-                a_nr(id,idx) = a_nr(id,idx) - coefp*p(m,n)
-              end do
-            end do
-   
-            ! row for i,j complete
-          end do
-        end do
-
-        ! solve the system
-        call linsolver(6,a_nr,x_nr,6,ierr)
-        if (ierr /= 0) then
-          ierr = 3
-          return
-        end if
-
-        ! compute the corrected solution
-        ! The following attempts to limit the size of the correction.
-        ! Min norm for aij should be same as the identity matrix.
-        ! Using it here as a basis for max size. No real meaning. Could 
-        ! use 0.1 too.
-
-        ! check size
-        norm_x_nr = x_nr(1)**2 + x_nr(4)**2 + x_nr(6)**2 +                     &
-                 2*(x_nr(2)**2 + x_nr(3)**2 + x_nr(5)**2)
-        if (norm_x_nr > third) then
-          do i = 1,6
-            x_nr(i) = third*x_nr(i)/sqrt(norm_x_nr)
-          end do
-        end if
-
-        ! check numerator of r_ratio
-        r_num = -one
-        do while (r_num < zero)
-          r_num = zero
-          
-          do i = 1,3
-            do j = 1,3 
-              id = index(i,j)
-              r_num = r_num + (a(i,j) + x_nr(id))*wtst(j,i)
-            end do
-          end do
-          
-          if (r_num < zero) then
-            r_num = zero
-            ! trying to reduce x depending on the flow. Arbitrary
-            min_sw_ws = min( (trace_stst/trace_wtwt),(trace_wtwt/trace_stst) ) &
-                        **fifth   
-            do i = 1,6
-              x_nr(i) = min_sw_ws*x_nr(i)
-            end do
-          end if
-
-        end do
-       
-        ! compute the corrected solution
-        do i = 1,3
-          do j = 1,3
-            id = index(i,j)
-            a(i,j) = a(i,j) + x_nr(id)
-          end do
-        end do
-
-        ! check convergence
-        converged = .true.
-
-        do i = 1,6
-          if (abs(x_nr(i)) > a_error) converged = .false.
-        end do
-
-        if (ktr == ktrmax) then
-          converged = .true.
-          ierr = 4
-          ! do not return when this error occurs
-          write(*,*) 'asbm error, ierr = ', ierr
-        end if
-
-      end do NewtonRhapson_ar
-      
-      ! check that r_ratio is not negative
-      if (r_ratio < -zero) then
-        ierr = 5
-        return
-      end if
 
     end if purerotation
 
@@ -650,8 +403,8 @@
     vec_wdt(3) = wft(2,1) - wt(2,1)
     
     ! their magninuteds
-    dot_vec_wtt = vec_wtt(1)**2.0_dp + vec_wtt(2)**2.0_dp + vec_wtt(3)**2.0_dp
-    dot_vec_wdt = vec_wdt(1)**2.0_dp + vec_wdt(2)**2.0_dp + vec_wdt(3)**2.0_dp
+    dot_vec_wtt = vec_wtt(1)**two + vec_wtt(2)**two + vec_wtt(3)**two
+    dot_vec_wdt = vec_wdt(1)**two + vec_wdt(2)**two + vec_wdt(3)**two
 
     ! check for total rotation
     if (dot_vec_wtt > zero) then
@@ -712,7 +465,7 @@
       else 
         call int_er_gt_one(eta_r,eta_f,oma,sqamth,phis,bets,chis,phi1,bet1,chi1)
       end if
-      struc_weight = exp(-100.0_dp*abs(eta_r - one)**2.0_dp)
+      struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)
       !phis = phis*(one - struc_weight) + phi1*(struc_weight)
       bets = bets*(one - struc_weight) + bet1*(struc_weight)
       chis = chis*(one - struc_weight) + chi1*(struc_weight)
@@ -732,11 +485,11 @@
       !a(1,2) = a(1,2)*(one - 1.5_dp*(trace_aa - third))**0.1_dp
       !a(2,1) = a(1,2)
     end if
-    struc_weight = exp(-100.0_dp*abs(eta_r - one)**2.0_dp)
+    struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)
     bet = bet*(one - struc_weight) + bet1*(struc_weight)
 
     ! compute helical scalar
-    scl_g = 2.0_dp*phi*(one - phi)/(one + chi)
+    scl_g = two*phi*(one - phi)/(one + chi)
     if (scl_g < zero) scl_g = zero
     scl_g = bet*sqrt(scl_g)
 
@@ -748,7 +501,7 @@
       ! blockage correction to phi and gamma
       trace_bl = bl(1,1) + bl(2,2) + bl(3,3)
 
-      phi = one - (one - trace_bl)**2.0_dp + phi*(one - trace_bl)**2.0_dp
+      phi = one - (one - trace_bl)**two + phi*(one - trace_bl)**two
       scl_g = (one - trace_bl)*scl_g
       !chi = (one - trace_bl)*chi
     endif
@@ -780,17 +533,18 @@
     endif
 
     ! Output some useful data
-    cir(1,1) = phi
-    cir(1,2) = bet
-    cir(1,3) = chi
+    cir(1,1) = h(1,1) !phi
+    cir(1,2) = h(2,2) !bet
+    cir(1,3) = h(3,3) !chi
 
-    cir(2,1) = eta_r
-    cir(2,2) = eta_f
+    cir(2,1) = h(1,2) !eta_r
+    cir(2,2) = h(2,1) !eta_f
     cir(2,3) = trace_aa
     
     cir(3,1) = vec_g(1)
     cir(3,2) = vec_g(2)
     cir(3,3) = vec_g(3)
+
   end subroutine asbm
 
 !=============================== INT_ER_LT_ONE ===============================80

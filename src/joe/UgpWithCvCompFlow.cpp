@@ -1522,7 +1522,7 @@ void UgpWithCvCompFlow::addViscFlux(double *Frhou, double &FrhoE, double (*A0)[5
     const double rho0, const double *u0, const double (&grad_u0)[3][3], const double h0, const double *grad_h0, const double T0, const double R0, const double gam0, const double kine0,
     const double rho1, const double *u1, const double (&grad_u1)[3][3], const double h1, const double *grad_h1, const double T1, const double R1, const double gam1, const double kine1,
     const double nonL, const double *rij_d, const double *rij_offd, const double mul, const double mut, const double lambdaOverCp, const double kine_fa, const double *u_fa,
-    const double area, const double *nVec, const double smag, const double *sVec)
+    const double area, const double *nVec, const double smag, const double *sVec, double &test1, double &test2, double &test3)
 {
   double alpha = vecDotVec3d(nVec, sVec);
   assert((alpha > 0.0) && (alpha < 1.000000001));
@@ -1635,7 +1635,9 @@ void UgpWithCvCompFlow::addViscFlux(double *Frhou, double &FrhoE, double (*A0)[5
   Frhou[1] = -area * tauij_nj[1];
   Frhou[2] = -area * tauij_nj[2];
 
-
+  test1 = -area*tauTurbij_nj[0];
+  test2 = -area*tauTurbij_nj[1];
+  test3 = -area*tauTurbij_nj[2];
   // ========================================================================
   // energy equation
   // ========================================================================
@@ -3041,7 +3043,7 @@ void UgpWithCvCompFlow::calcViscousFluxCoupled(double *ViscousFlux, double **A0,
          const double rho0, const double *u0, const double (&grad_u0)[3][3], const double h0, const double *grad_h0, const double T0, const double R0, const double gam0, const double *Scal0, const double (*gradScal0)[3], const double *dpress_dscal0, const double kine0,
          const double rho1, const double *u1, const double (&grad_u1)[3][3], const double h1, const double *grad_h1, const double T1, const double R1, const double gam1, const double *Scal1, const double (*gradScal1)[3], const double *dpress_dscal1, const double kine1,
          const double nonL, const double *rij_d, const double *rij_offd, const double mul, const double mut, const double lambdaOverCp, const double kine_fa, const double *u_fa, const double *diff, const double *DiffTerm,
-         const double area, const double *nVec, const double smag, const double *sVec, const double alpha, const int nScal)
+         const double area, const double *nVec, const double smag, const double *sVec, const double alpha, const int nScal, double &temp1, double &temp2, double &temp3)
 {
   double grad_u_f[3][3];
   for (int i = 0; i < 3; i++)
@@ -3122,6 +3124,10 @@ void UgpWithCvCompFlow::calcViscousFluxCoupled(double *ViscousFlux, double **A0,
   ViscousFlux[1] = - area * tauij_nj[0];
   ViscousFlux[2] = - area * tauij_nj[1];
   ViscousFlux[3] = - area * tauij_nj[2];
+
+  temp1 = -area*tauTurbij_nj[0];
+  temp2 = -area*tauTurbij_nj[1];
+  temp3 = -area*tauTurbij_nj[2];
 
 
   // ========================================================================
@@ -4340,7 +4346,7 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
             int icv0 = cvofa[ifa][0];
             assert( icv0 >= 0 );
 
-            // define Reynolds stresses
+            // specify Reynolds stresses
             rij_diag_fa[ifa][0] = rij_diag[icv0][0];
             rij_diag_fa[ifa][1] = rij_diag[icv0][1];
             rij_diag_fa[ifa][2] = rij_diag[icv0][2];
@@ -4373,11 +4379,12 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
             qVec[1] = nVec[2] * pVec[0] - nVec[0] * pVec[2];
             qVec[1] = nVec[0] * pVec[1] - nVec[1] * pVec[0];
 
-            // transform Reynolds stresses
-            unitMat[0][0] = nVec[0];   unitMat[0][1] = nVec[1];   unitMat[0][2] = nVec[2];
-            unitMat[1][0] = pVec[0];   unitMat[1][1] = pVec[1];   unitMat[1][2] = pVec[2];
-            unitMat[2][0] = qVec[0];   unitMat[2][1] = qVec[1];   unitMat[2][2] = qVec[2];
+            // orthogonal matrix between rij and rijbar
+            unitMat[0][0] = nVec[0];   unitMat[0][1] = pVec[0];   unitMat[0][2] = qVec[0];
+            unitMat[1][0] = nVec[1];   unitMat[1][1] = pVec[1];   unitMat[1][2] = qVec[1];
+            unitMat[2][0] = nVec[2];   unitMat[2][1] = pVec[2];   unitMat[2][2] = qVec[2];
 
+            // similarity transformation
             similMatR3(rijbarMat, unitMat, rijMat);
 
             // shear stresses are zero
@@ -4389,6 +4396,15 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
             // transform Reynolds stresses back to original coordinate system
             transMatR3(unitMat);
             similMatR3(rijMat, unitMat, rijbarMat);
+
+            // specify Reynolds stresses
+//            rij_diag_fa[ifa][0] = rijMat[0][0];
+//            rij_diag_fa[ifa][1] = rijMat[1][1];
+//            rij_diag_fa[ifa][2] = rijMat[2][2];
+//
+//            rij_offdiag_fa[ifa][0] = rijMat[0][1];
+//            rij_offdiag_fa[ifa][1] = rijMat[0][2];
+//            rij_offdiag_fa[ifa][2] = rijMat[1][2];
           }
         }
         // .............................................................................................

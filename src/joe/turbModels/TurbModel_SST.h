@@ -15,9 +15,6 @@ public:
 
   RansTurbSST()
   {
-    if (mpi_rank == 0)
-      cout << "RansTurbSST()" << endl;
-
     turbModel = SST;
 
     sigma_k1  = getDoubleParam("sigma_k1" , "0.85"   );
@@ -30,6 +27,9 @@ public:
     a1        = getDoubleParam("a1"       , "0.31"   );
 
     sst_form = getStringParam("SST_FORM", "STANDARD");
+
+    if (mpi_rank == 0)
+      cout << "RansTurbSST()" << " ----"<< sst_form << "----"<< endl;
 
     if (sst_form == "STANDARD")
     {

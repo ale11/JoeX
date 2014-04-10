@@ -67,6 +67,6 @@ JoeWithModels.o: JoeWithModels.cpp $(JoeWithModels_H)
 
 asbm.o: asbm.f90
 	$(F90) -c asbm.f90
-	
+
 clean:
 	rm $(OBJS) $(MUM_HOME)/bin/joe 

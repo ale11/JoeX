@@ -81,21 +81,24 @@ void JoeWithModels::initialHook()
     }
 
     // read the inlet profiles
-    int nnIC, nval;
-    fscanf(fp,"n=%d\td=%d", &nnIC, &nval);
-    if ((nval-5) != nScal)
+    int nnodes;  // number of nodes in data file
+    int nvar;    // number of variables in data file
+    int ica;     // interpolating coordinate axis
+
+    fscanf(fp,"n=%d\tv=%d\tc=%d", &nnodes, &nvar, &ica);
+    if ((nvar-5) != nScal)
     {
       cout << "file " << fileIC << "does not have required number of inputs" << endl;
       throw(-1);
     }
 
-    double **profilesIC = new double *[nnIC];
-    for (int i = 0; i < nnIC; i++)
-      profilesIC[i] = new double [nval];
+    double **profilesIC = new double *[nnodes];
+    for (int i = 0; i < nnodes; i++)
+      profilesIC[i] = new double [nvar];
 
     // file has variables y, rho, u, v, press, ...
-    for (int i = 0; i < nnIC; i++)
-      for (int v = 0; v < nval; v++)
+    for (int i = 0; i < nnodes; i++)
+      for (int v = 0; v < nvar; v++)
         fscanf(fp, "%lf", &profilesIC[i][v]);
 
     fclose(fp);
@@ -109,14 +112,14 @@ void JoeWithModels::initialHook()
       {
         int pos = 1;
         // while pos and pos-1 dont sandwich x_cv, keep increasing pos
-        while(profilesIC[pos][0] < x_cv[icv][1] && (pos < nnIC-1))       pos++;
+        while(profilesIC[pos][0] < x_cv[icv][ica] && (pos < nnodes-1))       pos++;
 
         double fi;
         // if boundVal doesn't have a node high enough to sandwich x_cv[icv]
-        if      (x_cv[icv][1] > profilesIC[pos][0])    fi = 1.0;
+        if      (x_cv[icv][ica] > profilesIC[pos][0])    fi = 1.0;
         // if boundVal doesn't have a node low enough to sandwich x_cv[icv]
-        else if (x_cv[icv][1] < profilesIC[pos-1][0])  fi = 0.0;
-        else    fi = (x_cv[icv][1] - profilesIC[pos-1][0])/(profilesIC[pos][0] - profilesIC[pos-1][0]);
+        else if (x_cv[icv][ica] < profilesIC[pos-1][0])  fi = 0.0;
+        else    fi = (x_cv[icv][ica] - profilesIC[pos-1][0])/(profilesIC[pos][0] - profilesIC[pos-1][0]);
 
         double rho1 = profilesIC[pos-1][1];
         double rho2 = profilesIC[pos][1];
@@ -149,14 +152,14 @@ void JoeWithModels::initialHook()
         {
           int pos = 1;
           // while pos and pos-1 dont sandwich x_cv, keep increasing pos
-          while(profilesIC[pos][0] < x_cv[icv][1] && (pos < nnIC-1))       pos++;
+          while(profilesIC[pos][0] < x_cv[icv][ica] && (pos < nnodes - 1))       pos++;
 
           double fi;
           // if boundVal doesn't have a node high enough to sandwich x_cv[icv]
-          if      (x_cv[icv][1] > profilesIC[pos][0])    fi = 1.0;
+          if      (x_cv[icv][ica] > profilesIC[pos][0])    fi = 1.0;
           // if boundVal doesn't have a node low enough to sandwich x_cv[icv]
-          else if (x_cv[icv][1] < profilesIC[pos-1][0])  fi = 0.0;
-          else    fi = (x_cv[icv][1] - profilesIC[pos-1][0])/(profilesIC[pos][0] - profilesIC[pos-1][0]);
+          else if (x_cv[icv][ica] < profilesIC[pos-1][0])  fi = 0.0;
+          else    fi = (x_cv[icv][ica] - profilesIC[pos-1][0])/(profilesIC[pos][0] - profilesIC[pos-1][0]);
 
           double phi1 = profilesIC[pos-1][5+iScal];
           double phi2 = profilesIC[pos][5+iScal];
@@ -172,7 +175,7 @@ void JoeWithModels::initialHook()
                   + rho[icv]*kine[icv];
     updateCvData(rhoE, REPLACE_DATA);
 
-    for (int i = 0; i < nnIC; i++)
+    for (int i = 0; i < nnodes; i++)
       delete [] profilesIC[i];
     delete [] profilesIC;
   }
@@ -247,6 +250,7 @@ void JoeWithModels::initialHook()
   // ============================================================================
   // SET THE BOUNDARY PROFILES
   // ============================================================================
+  // *** Note: only one boundary can be set as a PROFILES ***//
   string fileBC = "none";
   for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
     if (zone->getKind() == FA_ZONE_BOUNDARY)
@@ -270,21 +274,24 @@ void JoeWithModels::initialHook()
     }
 
     // read the boundary profiles
-    int nnBC, nval;
-    fscanf(fp,"n=%d\td=%d", &nnBC, &nval);
-    if ((nval-5) != nScal)
+    int nnodes;  // number of nodes in data file
+    int nvar;    // number of variables in data file
+    int ica;     // interpolating coordinate axis
+
+    fscanf(fp,"n=%d\tv=%d\tc=%d", &nnodes, &nvar, &ica);
+    if ((nvar-5) != nScal)
     {
       cout << "file " << fileBC << "does not have required number of inputs" << endl;
       throw(-1);
     }
 
-    double **profilesBC = new double *[nnBC];
-    for (int i = 0; i < nnBC; i++)
-      profilesBC[i] = new double [nval];
+    double **profilesBC = new double *[nnodes];
+    for (int i = 0; i < nnodes; i++)
+      profilesBC[i] = new double [nvar];
 
     // file has variables y, rho, u, v, press, ...
-    for (int i = 0; i < nnBC; i++)
-      for (int v = 0; v < nval; v++)
+    for (int i = 0; i < nnodes; i++)
+      for (int v = 0; v < nvar; v++)
         fscanf(fp, "%lf", &profilesBC[i][v]);
 
     fclose(fp);
@@ -304,12 +311,12 @@ void JoeWithModels::initialHook()
             for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
             {
               int pos=1;
-              while ((profilesBC[pos][0] < x_fa[ifa][1]) && (pos < nnBC-1))      pos++;
+              while ((profilesBC[pos][0] < x_fa[ifa][ica]) && (pos < nnodes-1))      pos++;
 
               double f;
-              if      (x_fa[ifa][1] > profilesBC[pos][0])   f = 1.0;
-              else if (x_fa[ifa][1] < profilesBC[pos-1][0]) f = 0.0;
-              else    f = (x_fa[ifa][1]-profilesBC[pos-1][0])/(profilesBC[pos][0]-profilesBC[pos-1][0]);
+              if      (x_fa[ifa][ica] > profilesBC[pos][0])   f = 1.0;
+              else if (x_fa[ifa][ica] < profilesBC[pos-1][0]) f = 0.0;
+              else    f = (x_fa[ifa][ica]-profilesBC[pos-1][0])/(profilesBC[pos][0]-profilesBC[pos-1][0]);
 
               double rho1 = profilesBC[pos-1][1];
               double rho2 = profilesBC[pos][1];
@@ -341,14 +348,14 @@ void JoeWithModels::initialHook()
                 {
                   int pos = 1;
                   // while pos and pos-1 dont sandwich x_cv, keep increasing pos
-                  while(profilesBC[pos][0] < x_fa[ifa][1] && (pos < nnBC-1))       pos++;
+                  while(profilesBC[pos][0] < x_fa[ifa][ica] && (pos < nnodes-1))       pos++;
 
                   double fi;
                   // if boundVal doesn't have a node high enough to sandwich x_cv[icv]
-                  if      (x_fa[ifa][1] > profilesBC[pos][0])    fi = 1.0;
+                  if      (x_fa[ifa][ica] > profilesBC[pos][0])    fi = 1.0;
                   // if boundVal doesn't have a node low enough to sandwich x_cv[icv]
-                  else if (x_fa[ifa][1] < profilesBC[pos-1][0])  fi = 0.0;
-                  else    fi = (x_fa[ifa][1] - profilesBC[pos-1][0])/(profilesBC[pos][0] - profilesBC[pos-1][0]);
+                  else if (x_fa[ifa][ica] < profilesBC[pos-1][0])  fi = 0.0;
+                  else    fi = (x_fa[ifa][ica] - profilesBC[pos-1][0])/(profilesBC[pos][0] - profilesBC[pos-1][0]);
 
                   double phi1 = profilesBC[pos-1][5+iScal];
                   double phi2 = profilesBC[pos][5+iScal];
@@ -358,7 +365,7 @@ void JoeWithModels::initialHook()
           }
       }
 
-    for (int i = 0; i < nnBC; i++)
+    for (int i = 0; i < nnodes; i++)
       delete [] profilesBC[i];
     delete [] profilesBC;
   }
@@ -2570,6 +2577,9 @@ void JoeWithModels::calcRhs(double *rhs_rho, double (*rhs_rhou)[3], double *rhs_
     for (int i = 0; i < 3; i++)
       rhs_rhou[icv][i] = 0.0;
     rhs_rhoE[icv] = 0.0;
+
+    for (int i = 0; i < 3; i++)
+      viscFlux[icv][i] = 0.0;
   }
 
   // set scalars RHS to zero
@@ -3669,11 +3679,14 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
     }
 
     // calculate viscous flux
+    double test1 = 0;
+    double test2 = 0;
+    double test3 = 0;
     addViscFlux(Frhou, FrhoE, A0, A1,
               rho[icv0], vel[icv0], grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0], gamma[icv0], kine0,
               rho[icv1], vel[icv1], grad_u[icv1], enthalpy[icv1], grad_enthalpy[icv1], temp[icv1], RoM[icv1], gamma[icv1], kine1,
               nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, uAux_fa,
-              area, nVec, smag, sVec);
+              area, nVec, smag, sVec, test1, test2, test3);
 
     if (flagImplicit)
     {
@@ -3700,12 +3713,20 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
       rhs_rhou[icv0][i] -= Frhou[i];
     rhs_rhoE[icv0] -= FrhoE;
 
+    viscFlux[icv0][0] -= test1;
+    viscFlux[icv0][1] -= test2;
+    viscFlux[icv0][2] -= test3;
+
     // icv1 can be ghost...
     if (icv1 < ncv)
     {
       for (int i = 0; i < 3; i++)
         rhs_rhou[icv1][i] += Frhou[i];
       rhs_rhoE[icv1] += FrhoE;
+
+      viscFlux[icv1][0] += test1;
+      viscFlux[icv1][1] += test2;
+      viscFlux[icv1][2] += test3;
     }
   }
 
@@ -3770,6 +3791,10 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
               rhs_rhou[icv0][0] += area*tauTurbij_nj[0];
               rhs_rhou[icv0][1] += area*tauTurbij_nj[1];
               rhs_rhou[icv0][2] += area*tauTurbij_nj[2];
+
+              viscFlux[icv0][0] += area*tauTurbij_nj[0];
+              viscFlux[icv0][1] += area*tauTurbij_nj[1];
+              viscFlux[icv0][2] += area*tauTurbij_nj[2];
             }
           }
         }
@@ -3799,11 +3824,14 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             }
 
             // calculate viscous flux
+            double test1 = 0;
+            double test2 = 0;
+            double test3 = 0;
             addViscFlux(Frhou, FrhoE, A0, NULL,
                       rho[icv0],    vel[icv0],    grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  kine0,
                       rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], kine1,
                       nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], 0.0, lamOcp_fa[ifa], kine_fa, vel_bfa[ifa],
-                      area, nVec, smag, nVec);  /* <- use nVec here instead of sVec, to avoid inaccurate correction*/
+                      area, nVec, smag, nVec, test1, test2, test3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction*/
 
             if (flagImplicit)
             {
@@ -3817,6 +3845,10 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             for (int i = 0; i < 3; i++)
               rhs_rhou[icv0][i] -= Frhou[i];
             rhs_rhoE[icv0] -= FrhoE;
+
+            viscFlux[icv0][0] -= test1;
+            viscFlux[icv0][1] -= test2;
+            viscFlux[icv0][2] -= test3;
           }
         }
         // .............................................................................................
@@ -3848,11 +3880,14 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             }
 
             // calculate viscous flux
+            double test1 = 0;
+            double test2 = 0;
+            double test3 = 0;
             addViscFlux(Frhou, FrhoE, A0, NULL,
                       rho[icv0],    vel[icv0],    grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  kine0,
                       rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], kine1,
                       nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, vel_bfa[ifa],
-                      area, nVec, smag, sVec);
+                      area, nVec, smag, sVec, test1, test2, test3);
 
             if (flagImplicit)
             {
@@ -3866,6 +3901,10 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             for (int i = 0; i < 3; i++)
               rhs_rhou[icv0][i] -= Frhou[i];
             rhs_rhoE[icv0] -= FrhoE;
+
+            viscFlux[icv0][0] -= test1;
+            viscFlux[icv0][1] -= test2;
+            viscFlux[icv0][2] -= test3;
           }
         }
       }
@@ -4623,6 +4662,10 @@ void JoeWithModels::calcRhsCoupled(double **rhs, double ***A, int nScal, int fla
     for (int i = 0; i < 5+nScal; i++)
       rhs[icv][i] = 0.0;
   
+  for (int icv = 0; icv < ncv; icv++)
+    for (int i = 0; i < 3; i++)
+      viscFlux[icv][i] = 0.0;
+
   // compute Euler and viscous fluxes for NS and scalars
   calcFluxCoupled(rhs, A, nScal, flagImplicit);
   
@@ -5115,21 +5158,35 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
         diffScal[iScal] = scalarTranspEqVector[iScal].diff[ifa];
       }      
       
+      double temp1 = 0.0;
+      double temp2 = 0.0;
+      double temp3 = 0.0;
       calcViscousFluxCoupled(ViscousFlux, A0, A1,
                  rho[icv0], vel[icv0], grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0], gamma[icv0], ScalCV0, gradScal0, dpress_dscal0, kineCV0,
                  rho[icv1], vel[icv1], grad_u[icv1], enthalpy[icv1], grad_enthalpy[icv1], temp[icv1], RoM[icv1], gamma[icv1], ScalCV1, gradScal1, dpress_dscal1, kineCV1,
                  nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, uAux_fa, diffScal, DiffTerm,
-                 area, nVec, smag, sVec, alpha, nScal);
+                 area, nVec, smag, sVec, alpha, nScal, temp1, temp2, temp3);
   
       // icv0 is always valid...
       for (int i = 0; i < 5+nScal; i++)
         rhs[icv0][i] -= ViscousFlux[i];
       
+      viscFlux[icv0][0] -= temp1;
+      viscFlux[icv0][1] -= temp2;
+      viscFlux[icv0][2] -= temp3;
+
       // icv1 can be ghost...
       if (icv1 < ncv)
         for (int i = 0; i < 5+nScal; i++)
           rhs[icv1][i] += ViscousFlux[i];
       
+      if (icv1 < ncv)
+      {
+        viscFlux[icv1][0] += temp1;
+        viscFlux[icv1][1] += temp2;
+        viscFlux[icv1][2] += temp3;
+      }
+
       if (flagImplicit)
       {
         for (int i = 0; i < 5+nScal; i++) 
@@ -5344,6 +5401,10 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               rhs[icv0][2] += area*tauTurbij_nj[1];
               rhs[icv0][3] += area*tauTurbij_nj[2];
               
+              viscFlux[icv0][0] += area*tauTurbij_nj[0];
+              viscFlux[icv0][1] += area*tauTurbij_nj[1];
+              viscFlux[icv0][2] += area*tauTurbij_nj[2];
+
               if (flagImplicit)
               {
                 // No implicit term considered here!
@@ -5446,15 +5507,22 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
                   gradScal0[iScal][i] = 0.0;
               }
               
+              double temp1 = 0.0;
+              double temp2 = 0.0;
+              double temp3 = 0.0;
               calcViscousFluxCoupled(ViscousFlux, A0, A1,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa], grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa], grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA,
                          nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kineFA, vel_bfa[ifa], diffScal, DiffTerm,
-                         area, nVec, smag, nVec, alpha, nScal);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
+                         area, nVec, smag, nVec, alpha, nScal, temp1, temp2, temp3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
 
               for (int i = 0; i < 5+nScal; i++)
                 rhs[icv0][i] -= ViscousFlux[i];
               
+              viscFlux[icv0][0] -= temp1;
+              viscFlux[icv0][1] -= temp2;
+              viscFlux[icv0][2] -= temp3;
+
               if (flagImplicit)
               {
                 for (int i = 0; i < 5+nScal; i++)
@@ -5633,15 +5701,22 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               }
               
               // Neumann BC for scalars is enforced by setting DiffTerm to 0
+              double temp1 = 0.0;
+              double temp2 = 0.0;
+              double temp3 = 0.0;
               calcViscousFluxCoupled(ViscousFlux, A0, NULL,
                          rho[icv0],    vel[icv0],    grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  ScalCV0, gradScal0, dpress_dscal0, kineCV0,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA,
                          nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], 0.0, lamOcp_fa[ifa], kineFA, vel_bfa[ifa], diffScal, DiffTerm,
-                         area, nVec, smag, nVec, alpha, nScal);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
+                         area, nVec, smag, nVec, alpha, nScal, temp1, temp2, temp3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
 
               for (int i = 0; i < 5+nScal; i++)
                 rhs[icv0][i] -= ViscousFlux[i];
               
+              viscFlux[icv0][0] -= temp1;
+              viscFlux[icv0][1] -= temp2;
+              viscFlux[icv0][2] -= temp3;
+
               if (flagImplicit)
               {
                 for (int i = 0; i < 5+nScal; i++)
@@ -5820,16 +5895,23 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               }
               
               // Neumann BC for scalars is enforced by setting DiffTerm to 0
+              double temp1 = 0.0;
+              double temp2 = 0.0;
+              double temp3 = 0.0;
               calcViscousFluxCoupled(ViscousFlux, A0, NULL,
                          rho[icv0],    vel[icv0],    grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  ScalCV0, gradScal0, dpress_dscal0, kineCV0,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA1,
                          nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kineFA1, vel_bfa[ifa], diffScal, DiffTerm,
 //                         area, nVec, smag, nVec, alpha, nScal);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
-                         area, nVec, smag, sVec, alpha, nScal);  
+                         area, nVec, smag, sVec, alpha, nScal, temp1, temp2, temp3);
 
               for (int i = 0; i < 5+nScal; i++)
                 rhs[icv0][i] -= ViscousFlux[i];
               
+              viscFlux[icv0][0] -= temp1;
+              viscFlux[icv0][1] -= temp2;
+              viscFlux[icv0][2] -= temp3;
+
               if (flagImplicit)
               {
                 for (int i = 0; i < 5+nScal; i++)
@@ -6852,11 +6934,14 @@ void JoeWithModels::calcFluxSemiCoupled(double **rhs, double **rhs_rhoScal, doub
         diffScal[iScal] = scalarTranspEqVector[iScal].diff[ifa];
       }      
       
+      double temp1 = 0.0;
+      double temp2 = 0.0;
+      double temp3 = 0.0;
       calcViscousFluxCoupled(ViscousFlux, A0, A1,
                  rho[icv0], vel[icv0], grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0], gamma[icv0], ScalCV0, gradScal0, dpress_dscal0, kineCV0,
                  rho[icv1], vel[icv1], grad_u[icv1], enthalpy[icv1], grad_enthalpy[icv1], temp[icv1], RoM[icv1], gamma[icv1], ScalCV1, gradScal1, dpress_dscal1, kineCV1,
                  nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, uAux_fa, diffScal, DiffTerm,
-                 area, nVec, smag, sVec, alpha, nScal);
+                 area, nVec, smag, sVec, alpha, nScal, temp1, temp2, temp3);
   
       // icv0 is always valid...
       reshapeRHSSemiCoupled(rhs, rhs_rhoScal, ViscousFlux, icv0, -1.0, nScal);
@@ -7117,11 +7202,14 @@ void JoeWithModels::calcFluxSemiCoupled(double **rhs, double **rhs_rhoScal, doub
                   gradScal0[iScal][i] = 0.0;
               }
               
+              double temp1 = 0.0;
+              double temp2 = 0.0;
+              double temp3 = 0.0;
               calcViscousFluxCoupled(ViscousFlux, A0, A1,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa], grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa], grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA,
                          nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kineFA, vel_bfa[ifa], diffScal, DiffTerm,
-                         area, nVec, smag, nVec, alpha, nScal);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
+                         area, nVec, smag, nVec, alpha, nScal, temp1, temp2, temp3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
               
               reshapeRHSSemiCoupled(rhs, rhs_rhoScal, ViscousFlux, icv0, -1.0, nScal);
               
@@ -7289,11 +7377,14 @@ void JoeWithModels::calcFluxSemiCoupled(double **rhs, double **rhs_rhoScal, doub
               }
               
               // Neumann BC for scalars is enforced by setting DiffTerm to 0
+              double temp1 = 0.0;
+              double temp2 = 0.0;
+              double temp3 = 0.0;
               calcViscousFluxCoupled(ViscousFlux, A0, NULL,
                          rho[icv0],    vel[icv0],    grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  ScalCV0, gradScal0, dpress_dscal0, kineCV0,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA,
                          nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], 0.0, lamOcp_fa[ifa], kineFA, vel_bfa[ifa], diffScal, DiffTerm,
-                         area, nVec, smag, nVec, alpha, nScal);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
+                         area, nVec, smag, nVec, alpha, nScal, temp1, temp2, temp3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
               
               reshapeRHSSemiCoupled(rhs, rhs_rhoScal, ViscousFlux, icv0, -1.0, nScal);
               
@@ -7467,12 +7558,15 @@ void JoeWithModels::calcFluxSemiCoupled(double **rhs, double **rhs_rhoScal, doub
               }
               
               // Neumann BC for scalars is enforced by setting DiffTerm to 0
+              double temp1 = 0.0;
+              double temp2 = 0.0;
+              double temp3 = 0.0;
               calcViscousFluxCoupled(ViscousFlux, A0, NULL,
                          rho[icv0],    vel[icv0],    grad_u[icv0], enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  ScalCV0, gradScal0, dpress_dscal0, kineCV0,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u[icv0], h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kineFA1,
                          nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kineFA1, vel_bfa[ifa], diffScal, DiffTerm,
 //                         area, nVec, smag, nVec, alpha, nScal);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
-                         area, nVec, smag, sVec, alpha, nScal);  
+                         area, nVec, smag, sVec, alpha, nScal, temp1, temp2, temp3);
               
               reshapeRHSSemiCoupled(rhs, rhs_rhoScal, ViscousFlux, icv0, -1.0, nScal);
               

@@ -163,9 +163,9 @@ public:
       for (ScalarTranspEqIterator data = scalarTranspEqVector.begin(); data < scalarTranspEqVector.end(); data++)
         fprintf(fp, "%.12le\t", data->phi[icv]);
 
-      //fprintf(fp, "%.12le\t", InterpolateAtCellCenterFromFaceValues(mul_fa, icv));
+      fprintf(fp, "%.12le\t", InterpolateAtCellCenterFromFaceValues(mul_fa, icv));
 
-      //fprintf(fp, "%.12le\t", grad_u[icv][0][1]);
+      fprintf(fp, "%.12le\t", grad_u[icv][0][1]);
 
       double *muT = getR1("muT");
       fprintf(fp, "%.12le\t", muT[icv]);

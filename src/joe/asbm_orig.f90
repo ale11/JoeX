@@ -340,22 +340,67 @@
     ! --------------------------------------------------------------------------
     ! check for rotation
     purerotation: if (rotation) then
-
-        r_ratio = trace_wtwt/trace_stst
-
-        ! compute alpha and beta
-        if (r_ratio < one) then
-          alpha2 = one - sqrt(one - r_ratio)     !hyperbolic mean flow
-        else
-          alpha2 = one + sqrt(one - one/r_ratio) !elliptic mean flow
+      ! for initial guess use ar
+      a = ar
+     
+      ! loop point for Newton-Rhapson (N-R) iteration
+      converged = .false.
+      ktr = 0
+      
+      NewtonRhapson_ar: do while (.not.converged)
+        ktr = ktr + 1
+        ! perturbations
+        if (mod(ktr,20) == 0) then
+          do i = 1,3
+            do j = 1,3
+              if (mod(ktr,40) == 0) then
+                a(i,j) = 0.5_dp*a(i,j)
+              else if (mod(ktr,200) == 0) then
+                a(i,j) = a(i,j) + ar(i,j)
+              else
+                a(i,j) = 2.0_dp*a(i,j)
+              end if
+            end do
+          end do
         end if
 
+        ! compute rotation parameters
+        trace_wtsta = zero
+        trace_ststa = zero
+        do i = 1,3
+          do j = 1,3
+            trace_wtsta = trace_wtsta + wtst(i,j)*a(j,i)
+            trace_ststa = trace_ststa + stst(i,j)*a(j,i)
+          end do
+        end do
+
+        if (ktr == 1) then
+          ! relative rotation parameter for first trial
+          r_ratio = one
+        else
+          ! relative rotation parameter for following trials
+          r_ratio = trace_wtsta/trace_ststa      
+          if (abs(r_ratio) < r_small) exit
+        end if
+        r_abs = abs(r_ratio)
+       
+        ! compute alpha and beta
+        if (r_abs < one) then
+          ! hyperbolic mean flow
+          aroot = sqrt(one - r_abs)
+          alpha2 = one - aroot
+        else
+          ! elliptic mean flow
+          aroot = sqrt(one - one/r_abs)
+          alpha2 = one + aroot
+        end if
         if (alpha2 < zero) alpha2 = zero
         alpha = sqrt(alpha2)
         
         term = 4.0_dp - 2.0_dp*alpha2
         if (term < zero) term = zero
-        beta = 2.0_dp - sqrt(term)
+        broot = sqrt(term)
+        beta = 2.0_dp - broot
 
         c2 = alpha/norm_wt
         c3 = beta/trace_wtwt
@@ -367,20 +412,175 @@
           end do
         end do
 
-        ! compute ar
+        ! compute initial x_nr
         do i = 1,3
           do j = i,3
+            id = index(i,j)
+            x_nr(id) = zero
 
-            a(i,j) = zero
             do k = 1,3
               do l = 1,3
-                a(i,j) = a(i,j) + h(i,k)*h(j,l)*as(k,l)
+                x_nr(id) = x_nr(id) + h(i,k)*h(j,l)*as(k,l)
               end do
             end do
 
-            a(j,i) = a(i,j)
           end do
         end do
+       
+        ! solution for first trial
+        if (ktr == 1) then
+          do i = 1,3
+            do j = i,3
+              id = index(i,j)
+              ! first pass solution
+              a(i,j) = x_nr(id)
+              a(j,i) = a(i,j)
+            end do
+          end do
+          ! done for the first trial
+          cycle
+        end if
+
+        ! components of Newton matrix
+        ! f(a) = a - H_ik*H_jl* as_kl
+        !          d(f)                  d(H_ik)*H_jl + d(H_jl)*H_ik
+        ! coefp = ----- = 1(on diag) - ( -------        -------      )*as_kl
+        !          d(a)                   d(a)           d(a)
+        ! coefa = d(alpha)     1
+        !         -------- * ------
+        !           d(a)     norm_wt
+        ! coefb = d(beta)        1
+        !         -------- * ---------
+        !           d(a)    trace_wtwt
+        ! where neither coefa, coefb include the p(k,l) term:
+        ! d(r_ratio)
+        ! ---------  = r*p(k,l)
+        !     da
+        coefa = fourth/(aroot*alpha*norm_wt)
+        coefb = half/(aroot*broot*trace_wtwt)
+
+        if (r_abs < one) then
+          coefa = coefa*r_ratio
+          coefb = coefb*r_ratio
+        else
+          coefa = coefa/r_ratio
+          coefb = coefb/r_ratio
+        end if
+
+        ! p(k,l) for nr calculation
+        do k = 1,3
+          do l = 1,3
+            p(k,l) = wtst(k,l)/trace_wtsta - stst(k,l)/trace_ststa
+          end do
+        end do    
+
+        ! finish x_nr and compute a_nr
+        do i = 1,3
+          do j = i,3
+            id = index(i,j)
+            x_nr(id) = x_nr(id) - a(i,j) !x_nr = -f(a_ij)
+              
+            ! initialize row in the matrix 
+            do k = 1,6
+              a_nr(id,k) = zero
+            end do
+            a_nr(id,id) = one
+
+            coefp = zero
+            do k = 1,3
+              do l = 1,3
+                coefp = coefp + ((coefa*wt(i,k) + coefb*wtwt(i,k))*h(j,l) +   &
+                                 (coefa*wt(j,l) + coefb*wtwt(j,l))*h(i,k))*   &
+                                as(k,l)
+              end do
+            end do
+
+            do n = 1,3
+              do m = 1,3
+                idx = index(n,m)
+                a_nr(id,idx) = a_nr(id,idx) - coefp*p(m,n)
+              end do
+            end do
+   
+            ! row for i,j complete
+          end do
+        end do
+
+        ! solve the system
+        call linsolver(6,a_nr,x_nr,6,ierr)
+        if (ierr /= 0) then
+          ierr = 3
+          return
+        end if
+
+        ! compute the corrected solution
+        ! The following attempts to limit the size of the correction.
+        ! Min norm for aij should be same as the identity matrix.
+        ! Using it here as a basis for max size. No real meaning. Could 
+        ! use 0.1 too.
+
+        ! check size
+        norm_x_nr = x_nr(1)**2 + x_nr(4)**2 + x_nr(6)**2 +                     &
+                 2*(x_nr(2)**2 + x_nr(3)**2 + x_nr(5)**2)
+        if (norm_x_nr > third) then
+          do i = 1,6
+            x_nr(i) = third*x_nr(i)/sqrt(norm_x_nr)
+          end do
+        end if
+
+        ! check numerator of r_ratio
+        r_num = -one
+        do while (r_num < zero)
+          r_num = zero
+          
+          do i = 1,3
+            do j = 1,3 
+              id = index(i,j)
+              r_num = r_num + (a(i,j) + x_nr(id))*wtst(j,i)
+            end do
+          end do
+          
+          if (r_num < zero) then
+            r_num = zero
+            ! trying to reduce x depending on the flow. Arbitrary
+            min_sw_ws = min( (trace_stst/trace_wtwt),(trace_wtwt/trace_stst) ) &
+                        **fifth   
+            do i = 1,6
+              x_nr(i) = min_sw_ws*x_nr(i)
+            end do
+          end if
+
+        end do
+       
+        ! compute the corrected solution
+        do i = 1,3
+          do j = 1,3
+            id = index(i,j)
+            a(i,j) = a(i,j) + x_nr(id)
+          end do
+        end do
+
+        ! check convergence
+        converged = .true.
+
+        do i = 1,6
+          if (abs(x_nr(i)) > a_error) converged = .false.
+        end do
+
+        if (ktr == ktrmax) then
+          converged = .true.
+          ierr = 4
+          ! do not return when this error occurs
+          write(*,*) 'asbm error, ierr = ', ierr
+        end if
+
+      end do NewtonRhapson_ar
+      
+      ! check that r_ratio is not negative
+      if (r_ratio < -zero) then
+        ierr = 5
+        return
+      end if
 
     end if purerotation
 

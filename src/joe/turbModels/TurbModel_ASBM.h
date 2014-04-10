@@ -44,8 +44,6 @@ public: // constructor, destructor
     // Debugging variables
     hatwt         = NULL;     registerScalar(hatwt,         "hatwt",         CV_DATA);
     hatst         = NULL;     registerScalar(hatst,         "hatst",         CV_DATA);
-    ststa         = NULL;     registerScalar(ststa,         "ststa",         CV_DATA);
-    vecg          = NULL;     registerVector(vecg,          "vecg",          CV_DATA);
     marker        = NULL;     // this is an integer array
     rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",  CV_DATA);
     rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
@@ -92,8 +90,7 @@ protected: // member variables
   // -------------------------------------------------------------------------------
   // Debugging variables
   int *marker;
-  double *hatwt, *hatst, *ststa;
-  double (*vecg)[3];
+  double *hatwt, *hatst;
   double (*rij_diag_nd)[3];
   double (*rij_offdiag_nd)[3];
   double (*dij_diag)[3];
@@ -283,6 +280,14 @@ public:   // member functions
              << " Cell-z: " << x_cv[icv][2] << endl;
       }
 
+      /*
+      REY[0][0] = 1.0/3.0 - 0.09*st_diag[icv][0];
+      REY[1][1] = 1.0/3.0 - 0.09*st_diag[icv][1];
+      REY[2][2] = 1.0/3.0 - 0.09*st_diag[icv][2];
+      REY[0][1] = -0.09*st_offdiag[icv][0];
+      REY[0][2] = -0.09*st_offdiag[icv][1];
+      REY[1][2] = -0.09*st_offdiag[icv][2];
+       */
       rij_diag[icv][0] = -REY[0][0]*2.0*kine[icv]*rho[icv];
       rij_diag[icv][1] = -REY[1][1]*2.0*kine[icv]*rho[icv];
       rij_diag[icv][2] = -REY[2][2]*2.0*kine[icv]*rho[icv];
@@ -307,11 +312,6 @@ public:   // member functions
       etaf[icv] = CIR[1][1];
       a2[icv]   = CIR[2][1];
 
-      vecg[icv][0] = CIR[0][2];
-      vecg[icv][1] = CIR[1][2];
-      vecg[icv][2] = CIR[2][2];
-      //normVec3d(vecg[icv]);
-
       if (rij_offdiag[icv][0] != rij_offdiag[icv][0])
         marker[icv] = 1;
 
@@ -331,8 +331,6 @@ public:   // member functions
       dij_offdiag[icv][0] = DIM[0][1];
       dij_offdiag[icv][1] = DIM[0][2];
       dij_offdiag[icv][2] = DIM[1][2];
-
-      //linearizeASBMstress(icv);
     }
 
     updateCvData(rij_diag, REPLACE_ROTATE_DATA);
@@ -391,459 +389,6 @@ public:   // member functions
       }
     }
   }
-
-  void linearizeASBMstress(int icv)
-  {
-    //###############################################################
-    //Compute eigenvectors/scalars for ASBM stresses
-    //###############################################################
-    double aij[3][3], eigv[3][3], eigs[3], eigsnew[3][3];
-    int order[3];
-
-    // open variables for eigenvalue and anisotropy tensor
-    for (int i=0; i < 3; i++)
-    {
-      for (int j=0; j < 3; j++)
-      {
-	aij[i][j] = 0.0;
-	eigv[i][j] = 0.0;
-	eigsnew[i][j] = 0.0;
-      }
-      eigs[i] = 0.0;
-      order[i] = 0;
-    }
-
-    // compute the anisotropy
-    aij[0][0] = rij_diag_nd[icv][0] - 1.0/3.0;
-    aij[1][1] = rij_diag_nd[icv][1] - 1.0/3.0;
-    aij[2][2] = rij_diag_nd[icv][2] - 1.0/3.0;
-    aij[0][1] = rij_offdiag_nd[icv][0];
-    aij[0][2] = rij_offdiag_nd[icv][1];
-    aij[1][2] = rij_offdiag_nd[icv][2];
-    aij[1][0] = aij[0][1];
-    aij[2][0] = aij[0][2];
-    aij[2][1] = aij[1][2];
-
-    //aij tensor now built - build barycentric map locations
-    //compute eigenvalues of aij
-    eigen_decomposition(aij,eigv,eigs);
-
-    //sort eigenvalues by magnitude, save ordering in 'order'
-    if ((eigs[0] >= eigs[1]) && (eigs[0] >= eigs[2]))
-    {
-      order[0] = 0;
-      order[1] = 1;
-      order[2] = 2;
-      if (eigs[2] >= eigs[1])
-      {
-	order[1] = 2;
-	order[2] = 1;
-      }
-    }
-    if ((eigs[1] >= eigs[0]) && (eigs[1] >= eigs[2]))
-    {
-      order[0] = 1;
-      order[1] = 0;
-      order[2] = 2;
-      if (eigs[2] >= eigs[0])
-      {
-	order[1] = 2;
-	order[2] = 0;
-      }
-    }
-    if ((eigs[2] >= eigs[0]) && (eigs[2] >= eigs[1]))
-    {
-      order[0] = 2;
-      order[1] = 0;
-      order[2] = 1;
-      if (eigs[1] >= eigs[0])
-      {
-	order[1] = 1;
-	order[2] = 0;
-      }
-    }
-
-    //store eigenvalues in order
-    eigsnew[0][0] = eigs[order[0]];
-    eigsnew[1][1] = eigs[order[1]];
-    eigsnew[2][2] = eigs[order[2]];
-
-    //###############################################################
-    // Compute eigenvectors/scalars for EVM stresses
-    //###############################################################
-    double aijEVM[3][3], eigvEVM[3][3], eigvnewEVM[3][3], eigvtEVM[3][3], eigsEVM[3];
-    int orderEVM[3];
-
-    // open variables for eigenvalue and anisotropy tensor
-    for (int i=0; i < 3; i++)
-    {
-      for (int j=0; j < 3; j++)
-      {
-	aijEVM[i][j] = 0.0;
-	eigvEVM[i][j] = 0.0;
-      }
-      eigsEVM[i] = 0.0;
-      orderEVM[i] = 0;
-    }
-
-    // compute the anisotorpy
-    double s00 = grad_u[icv][0][0] - 1.0/3.0*diverg[icv];
-    double s11 = grad_u[icv][1][1] - 1.0/3.0*diverg[icv];
-    double s22 = grad_u[icv][2][2] - 1.0/3.0*diverg[icv];
-    double s01 = 0.5*(grad_u[icv][0][1] + grad_u[icv][1][0]);
-    double s02 = 0.5*(grad_u[icv][0][2] + grad_u[icv][2][0]);
-    double s12 = 0.5*(grad_u[icv][1][2] + grad_u[icv][2][1]);
-
-    double tauthird = turbTS[icv]/3.0;
-    aijEVM[0][0] = -tauthird*s00;
-    aijEVM[1][1] = -tauthird*s11;
-    aijEVM[2][2] = -tauthird*s22;
-    aijEVM[0][1] = -tauthird*s01;
-    aijEVM[0][2] = -tauthird*s02;
-    aijEVM[1][2] = -tauthird*s12;
-    aijEVM[1][0] = aijEVM[0][1];
-    aijEVM[2][0] = aijEVM[0][2];
-    aijEVM[2][1] = aijEVM[1][2];
-
-    //aij tensor now built - build barycentric map locations
-    //compute eigenvalues of aij
-    eigen_decomposition(aijEVM,eigvEVM,eigsEVM);
-
-    //sort eigenvalues by magnitude, save ordering in 'order'
-    if ((eigsEVM[0] >= eigsEVM[1]) && (eigsEVM[0] >= eigsEVM[2]))
-    {
-      orderEVM[0] = 0;
-      orderEVM[1] = 1;
-      orderEVM[2] = 2;
-      if (eigsEVM[2] >= eigsEVM[1])
-      {
-	orderEVM[1] = 2;
-	orderEVM[2] = 1;
-      }
-    }
-    if ((eigsEVM[1] >= eigsEVM[0]) && (eigsEVM[1] >= eigsEVM[2]))
-    {
-      orderEVM[0] = 1;
-      orderEVM[1] = 0;
-      orderEVM[2] = 2;
-      if (eigsEVM[2] >= eigsEVM[0])
-      {
-	orderEVM[1] = 2;
-	orderEVM[2] = 0;
-      }
-    }
-    if ((eigsEVM[2] >= eigsEVM[0]) && (eigsEVM[2] >= eigsEVM[1]))
-    {
-      orderEVM[0] = 2;
-      orderEVM[1] = 0;
-      orderEVM[2] = 1;
-      if (eigsEVM[1] >= eigsEVM[0])
-      {
-	orderEVM[1] = 1;
-	orderEVM[2] = 0;
-      }
-    }
-
-    //store eigenvectors in order
-    for (int i = 0; i < 3; i++)
-    {
-      eigvnewEVM[i][0] = eigvEVM[i][orderEVM[0]];
-      eigvnewEVM[i][1] = eigvEVM[i][orderEVM[1]];
-      eigvnewEVM[i][2] = eigvEVM[i][orderEVM[2]];
-    }
-
-    //generate transpose
-    for (int i=0; i < 3; i++)
-      for (int j=0; j < 3; j++)
-	eigvtEVM[j][i] = eigvnewEVM[i][j];
-      
-
-    //###############################################################
-    // Compute new Reynolds stresses
-    //###############################################################
-    double rij[3][3], rijt[3][3];
-    matMult(rijt,eigvnewEVM,eigsnew);
-    matMult(rij,rijt,eigvtEVM);
-    
-    rij[0][0] += 1.0/3.0;
-    rij[1][1] += 1.0/3.0;
-    rij[2][2] += 1.0/3.0;
-    
-    rij_diag[icv][0] = -rij[0][0]*2.0*kine[icv]*rho[icv];
-    rij_diag[icv][1] = -rij[1][1]*2.0*kine[icv]*rho[icv];
-    rij_diag[icv][2] = -rij[2][2]*2.0*kine[icv]*rho[icv];
-    
-    rij_offdiag[icv][0] = -rij[0][1]*2.0*kine[icv]*rho[icv];
-    rij_offdiag[icv][1] = -rij[0][2]*2.0*kine[icv]*rho[icv];
-    rij_offdiag[icv][2] = -rij[1][2]*2.0*kine[icv]*rho[icv];  
-  }
-
-  // ###################################################################
-  // The files below are used for computing eigenvalues and eigenvectors
-  // ###################################################################
-
-  void matMult(double (*res)[3], double (*m1)[3], double (*m2)[3])  // m1*m2 matrices
-   {
-     for (int i=0; i<3; i++)
-       for (int j=0; j<3; j++)
-         {
-           res[i][j] = 0.0;
-           for (int k=0; k<3; k++)
-             res[i][j] += m1[i][k]*m2[k][j];
-         }
-   }
-
-   //these routiens are for computing the eigenvalue decomposition
-   static double hypot2(double x, double y)
-   {
-     return sqrt(x*x+y*y);
-   }
-
-   static void tred2(double V[3][3], double d[3], double e[3]) {
-
-     //  This is derived from the Algol procedures tred2 by
-     //  Bowdler, Martin, Reinsch, and Wilkinson, Handbook for
-     //  Auto. Comp., Vol.ii-Linear Algebra, and the corresponding
-     //  Fortran subroutine in EISPACK.
-
-     for (int j = 0; j < 3; j++) {
-       d[j] = V[3-1][j];
-     }
-
-     // Householder reduction to tridiagonal form.
-
-     for (int i = 3-1; i > 0; i--) {
-
-       // Scale to avoid under/overflow.
-
-       double scale = 0.0;
-       double h = 0.0;
-       for (int k = 0; k < i; k++) {
-         scale = scale + fabs(d[k]);
-       }
-       if (scale == 0.0) {
-         e[i] = d[i-1];
-         for (int j = 0; j < i; j++) {
-           d[j] = V[i-1][j];
-           V[i][j] = 0.0;
-           V[j][i] = 0.0;
-         }
-       } else {
-
-         // Generate Householder vector.
-
-         for (int k = 0; k < i; k++) {
-           d[k] /= scale;
-           h += d[k] * d[k];
-         }
-         double f = d[i-1];
-         double g = sqrt(h);
-         if (f > 0) {
-           g = -g;
-         }
-         e[i] = scale * g;
-         h = h - f * g;
-         d[i-1] = f - g;
-         for (int j = 0; j < i; j++) {
-           e[j] = 0.0;
-         }
-
-         // Apply similarity transformation to remaining columns.
-
-         for (int j = 0; j < i; j++) {
-           f = d[j];
-           V[j][i] = f;
-           g = e[j] + V[j][j] * f;
-           for (int k = j+1; k <= i-1; k++) {
-             g += V[k][j] * d[k];
-             e[k] += V[k][j] * f;
-           }
-           e[j] = g;
-         }
-         f = 0.0;
-         for (int j = 0; j < i; j++) {
-           e[j] /= h;
-           f += e[j] * d[j];
-         }
-         double hh = f / (h + h);
-         for (int j = 0; j < i; j++) {
-           e[j] -= hh * d[j];
-         }
-         for (int j = 0; j < i; j++) {
-           f = d[j];
-           g = e[j];
-           for (int k = j; k <= i-1; k++) {
-             V[k][j] -= (f * e[k] + g * d[k]);
-           }
-           d[j] = V[i-1][j];
-           V[i][j] = 0.0;
-         }
-       }
-       d[i] = h;
-     }
-
-     // Accumulate transformations.
-
-     for (int i = 0; i < 3-1; i++) {
-       V[3-1][i] = V[i][i];
-       V[i][i] = 1.0;
-       double h = d[i+1];
-       if (h != 0.0) {
-         for (int k = 0; k <= i; k++) {
-           d[k] = V[k][i+1] / h;
-         }
-         for (int j = 0; j <= i; j++) {
-           double g = 0.0;
-           for (int k = 0; k <= i; k++) {
-             g += V[k][i+1] * V[k][j];
-           }
-           for (int k = 0; k <= i; k++) {
-             V[k][j] -= g * d[k];
-           }
-         }
-       }
-       for (int k = 0; k <= i; k++) {
-         V[k][i+1] = 0.0;
-       }
-     }
-     for (int j = 0; j < 3; j++) {
-       d[j] = V[3-1][j];
-       V[3-1][j] = 0.0;
-     }
-     V[3-1][3-1] = 1.0;
-     e[0] = 0.0;
-   }
-         // Symmetric tridiagonal QL algorithm.
-
-   static void tql2(double V[3][3], double d[3], double e[3]) {
-
-                 //  This is derived from the Algol procedures tql2, by
-                 //  Bowdler, Martin, Reinsch, and Wilkinson, Handbook for
-                 //  Auto. Comp., Vol.ii-Linear Algebra, and the corresponding
-                 //  Fortran subroutine in EISPACK.
-
-                 for (int i = 1; i < 3; i++) {
-                         e[i-1] = e[i];
-                 }
-                 e[3-1] = 0.0;
-
-                 double f = 0.0;
-                 double tst1 = 0.0;
-                 double eps = pow(2.0,-52.0);
-                 for (int l = 0; l < 3; l++) {
-
-                         // Find small subdiagonal element
-
-                         tst1 = max(tst1,(fabs(d[l]) + fabs(e[l])));
-                         int m = l;
-                         while (m < 3) {
-                                 if (fabs(e[m]) <= eps*tst1) {
-                                         break;
-                                 }
-                                 m++;
-                         }
-
-                         // If m == l, d[l] is an eigenvalue,
-                         // otherwise, iterate.
-
-                         if (m > l) {
-                                 int iter = 0;
-                                 do {
-                                         iter = iter + 1;  // (Could check iteration count here.)
-
-                                         // Compute implicit shift
-
-                                         double g = d[l];
-                                         double p = (d[l+1] - g) / (2.0 * e[l]);
-                                         double r = hypot2(p,1.0);
-                                         if (p < 0) {
-                                                 r = -r;
-                                         }
-                                         d[l] = e[l] / (p + r);
-                                         d[l+1] = e[l] * (p + r);
-                                         double dl1 = d[l+1];
-                                         double h = g - d[l];
-                                         for (int i = l+2; i < 3; i++) {
-                                                 d[i] -= h;
-                                         }
-                                         f = f + h;
-
-                                         // Implicit QL transformation.
-
-                                         p = d[m];
-                                         double c = 1.0;
-                                         double c2 = c;
-                                         double c3 = c;
-                                         double el1 = e[l+1];
-                                         double s = 0.0;
-                                         double s2 = 0.0;
-                                         for (int i = m-1; i >= l; i--) {
-                                                 c3 = c2;
-                                                 c2 = c;
-                                                 s2 = s;
-                                                 g = c * e[i];
-                                                 h = c * p;
-                                                 r = hypot2(p,e[i]);
-                                                 e[i+1] = s * r;
-                                                 s = e[i] / r;
-                                                 c = p / r;
-                                                 p = c * d[i] - s * g;
-                                                 d[i+1] = h + s * (c * g + s * d[i]);
-
-                                                 // Accumulate transformation.
-
-                                                 for (int k = 0; k < 3; k++) {
-                                                         h = V[k][i+1];
-                                                         V[k][i+1] = s * V[k][i] + c * h;
-                                                         V[k][i] = c * V[k][i] - s * h;
-                                                 }
-                                         }
-                                         p = -s * s2 * c3 * el1 * e[l] / dl1;
-                                         e[l] = s * p;
-                                         d[l] = c * p;
-
-                                         // Check for convergence.
-
-                                 } while (fabs(e[l]) > eps*tst1);
-                         }
-                         d[l] = d[l] + f;
-                         e[l] = 0.0;
-                 }
-
-                 // Sort eigenvalues and corresponding vectors.
-
-                 for (int i = 0; i < 3-1; i++) {
-                         int k = i;
-                         double p = d[i];
-                         for (int j = i+1; j < 3; j++) {
-                                 if (d[j] < p) {
-                                         k = j;
-                                         p = d[j];
-                                 }
-                         }
-                         if (k != i) {
-                                 d[k] = d[i];
-                                 d[i] = p;
-                                 for (int j = 0; j < 3; j++) {
-                                         p = V[j][i];
-                                         V[j][i] = V[j][k];
-                                         V[j][k] = p;
-                                 }
-                         }
-                 }
-         }
-
-   void eigen_decomposition(double A[3][3], double V[3][3], double d[3])
-   {
-     double e[3];
-     for (int i = 0; i < 3; i++) {
-       for (int j = 0; j < 3; j++) {
-         V[i][j] = A[i][j];
-       }
-     }
-     tred2(V, d, e);
-     tql2(V, d, e);
-   }
 
   void calcBlockTensor()
   {
@@ -1968,7 +1513,7 @@ public:
     {
       double nu = calcMuLam(icv)/rho[icv];
 
-      double tau    = 1.0/(betaStar*omega[icv]);
+      double tau    = 1.0/max(betaStar*omega[icv],betaStar*cLim*strMag[icv]/sqrt(betaStar));
       double tauKol = 6.0*sqrt(nu/(betaStar*kine[icv]*omega[icv]));
       double tauRel = sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
 
