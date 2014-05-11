@@ -4336,15 +4336,15 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
         // .............................................................................................
         if (param->getString() == "SYMMETRY")
         {
-          // No viscous flux in this case (or yes!)
           double nVec[3], pVec[3], qVec[3];
-          double mag;
           double unitMat[3][3], rijMat[3][3], rijbarMat[3][3];
 
           for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
           {
             int icv0 = cvofa[ifa][0];
             assert( icv0 >= 0 );
+
+            double mag = normVec3d(nVec, fa_normal[ifa]);
 
             // specify Reynolds stresses
             rij_diag_fa[ifa][0] = rij_diag[icv0][0];
@@ -4355,6 +4355,30 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
             rij_offdiag_fa[ifa][1] = rij_offdiag[icv0][1];
             rij_offdiag_fa[ifa][2] = rij_offdiag[icv0][2];
 
+            double lbound = 0.999999;
+
+            if (fabs(nVec[0]) > lbound)
+            {
+              rij_offdiag_fa[ifa][0] = 0.0;
+              rij_offdiag_fa[ifa][1] = 0.0;
+            }
+            else if (fabs(nVec[1]) > lbound)
+            {
+              rij_offdiag_fa[ifa][0] = 0.0;
+              rij_offdiag_fa[ifa][2] = 0.0;
+            }
+            else if (fabs(nVec[2]) > lbound)
+            {
+              rij_offdiag_fa[ifa][1] = 0.0;
+              rij_offdiag_fa[ifa][2] = 0.0;
+            }
+            else
+            {
+              cout << "Warning, symmetry face not orthogonal to a coordinate axis,";
+              cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
+            }
+
+            /*
             rijMat[0][0] = rij_diag[icv0][0];
             rijMat[0][1] = rij_offdiag[icv0][0];
             rijMat[0][2] = rij_offdiag[icv0][1];
@@ -4368,8 +4392,6 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
             rijMat[2][2] = rij_diag[icv0][2];
 
             // compute new coordinate system
-            mag = normVec3d(nVec, fa_normal[ifa]);
-
             int nof_f = noofa_i[ifa];
             int nof_l = noofa_i[ifa+1]-1;
             vecMinVec3d(pVec, x_no[noofa_v[nof_f]], x_no[noofa_v[nof_l]]);
@@ -4398,13 +4420,14 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
             similMatR3(rijMat, unitMat, rijbarMat);
 
             // specify Reynolds stresses
-//            rij_diag_fa[ifa][0] = rijMat[0][0];
-//            rij_diag_fa[ifa][1] = rijMat[1][1];
-//            rij_diag_fa[ifa][2] = rijMat[2][2];
-//
-//            rij_offdiag_fa[ifa][0] = rijMat[0][1];
-//            rij_offdiag_fa[ifa][1] = rijMat[0][2];
-//            rij_offdiag_fa[ifa][2] = rijMat[1][2];
+            rij_diag_fa[ifa][0] = rijMat[0][0];
+            rij_diag_fa[ifa][1] = rijMat[1][1];
+            rij_diag_fa[ifa][2] = rijMat[2][2];
+
+            rij_offdiag_fa[ifa][0] = rijMat[0][1];
+            rij_offdiag_fa[ifa][1] = rijMat[0][2];
+            rij_offdiag_fa[ifa][2] = rijMat[1][2];
+            */
           }
         }
         // .............................................................................................

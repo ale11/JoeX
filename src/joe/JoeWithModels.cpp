@@ -3745,58 +3745,96 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
         // .............................................................................................
         if ((param->getString() == "SYMMETRY") || (param->getString() == "NOTHING"))
         {
-          if (kine_index > -1)
+          double tauTurbij_nj[3];
+          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
           {
-            double tauTurbij_nj[3];
-            for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
+            int icv0 = cvofa[ifa][0];
+            assert( icv0 >= 0 );
+
+            double nVec[3] = {0.0, 0.0, 0.0};
+            double area = normVec3d(nVec, fa_normal[ifa]);
+            double sVec[3] = {0.0, 0.0, 0.0};
+            vecMinVec3d(sVec, x_fa[ifa], x_cv[icv0]);
+            double smag = fabs(vecDotVec3d(sVec, nVec));  // project sVec to wall face normal
+
+            double kine0 = 0.0;
+            double kine1 = 0.0;
+            double kine_fa = 0.0;
+            if (kine_index > -1)
             {
-              int icv0 = cvofa[ifa][0];
-              assert( icv0 >= 0 );
-              double nVec[3] = {0.0, 0.0, 0.0};
-              double area = normVec3d(nVec, fa_normal[ifa]);
-
+              double *phi = scalarTranspEqVector[kine_index].phi;
               double *phi_bfa = scalarTranspEqVector[kine_index].phi_bfa;
-              double kine_fa  = phi_bfa[ifa];
-//              double Skk = grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2];
-//
-//              // Laminar fluxes: -2/3*mul*Skk*deltaij
-//              double tmp = -2.0/3.0 * mul_fa[ifa] * Skk;
-//              // Turbulent fluxes: -2/3*mut*Skk*deltaij
-//              tmp -= (1.0 - nonLinear[ifa]) * 2.0/3.0 * mut_fa[ifa] * Skk;
-//              // -2/3*rho*k (only for Boussinesq turb models)
-              double tmp;
-              if (turbModel > NONE)
-                tmp = -2.0/3.0 * rho_bfa[ifa] * kine_fa;
-                //tmp = -(1.0 - nonLinear[ifa]) * 2.0/3.0 * rho_bfa[ifa] * kine_fa;
-
-              tauTurbij_nj[0] = tmp*nVec[0];
-              tauTurbij_nj[1] = tmp*nVec[1];
-              tauTurbij_nj[2] = tmp*nVec[2];
-
-              // Nonlinear Reynolds stresses -rho <u'_i u'_j>
-              //tauTurbij_nj[0] += nonLinear[ifa]*(rij_diag_fa[ifa][0]*nVec[0]
-              //                                 + rij_offdiag_fa[ifa][0]*nVec[1]
-              //                                 + rij_offdiag_fa[ifa][1]*nVec[2]);
-
-
-              //tauTurbij_nj[1] += nonLinear[ifa]*(rij_offdiag_fa[ifa][0]*nVec[0]
-              //                                 + rij_diag_fa[ifa][1]*nVec[1]
-              //                                 + rij_offdiag_fa[ifa][2]*nVec[2]);
-
-              //tauTurbij_nj[2] += nonLinear[ifa]*(rij_offdiag_fa[ifa][1]*nVec[0]
-              //                                 + rij_offdiag_fa[ifa][2]*nVec[1]
-              //                                 + rij_diag_fa[ifa][2]*nVec[2]);
-//
-              // Add all contributions to rhs
-              rhs_rhou[icv0][0] += area*tauTurbij_nj[0];
-              rhs_rhou[icv0][1] += area*tauTurbij_nj[1];
-              rhs_rhou[icv0][2] += area*tauTurbij_nj[2];
-
-              viscFlux[icv0][0] += area*tauTurbij_nj[0];
-              viscFlux[icv0][1] += area*tauTurbij_nj[1];
-              viscFlux[icv0][2] += area*tauTurbij_nj[2];
+              kine0 = phi[icv0];
+              kine1 = phi_bfa[ifa];
+              kine_fa = kine1;
             }
+
+            // calculate viscous flux
+            double test1 = 0;
+            double test2 = 0;
+            double test3 = 0;
+
+            double grad_sym[3][3] = {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
+
+            grad_sym[0][0] = grad_u[icv0][0][0];   grad_sym[0][1] = grad_u[icv0][0][1];   grad_sym[0][2] = grad_u[icv0][0][2];
+            grad_sym[1][0] = grad_u[icv0][1][0];   grad_sym[1][1] = grad_u[icv0][1][1];   grad_sym[1][2] = grad_u[icv0][1][2];
+            grad_sym[2][0] = grad_u[icv0][2][0];   grad_sym[2][1] = grad_u[icv0][2][1];   grad_sym[2][2] = grad_u[icv0][2][2];
+
+            double lbound = 0.999999;
+
+            if (fabs(nVec[0]) > lbound)
+            {
+              grad_sym[0][1] = 0.0;
+              grad_sym[0][2] = 0.0;
+              grad_sym[1][0] = 0.0;
+              grad_sym[2][0] = 0.0;
+            }
+            else if (fabs(nVec[1]) > lbound)
+            {
+              grad_sym[0][1] = 0.0;
+              grad_sym[1][0] = 0.0;
+              grad_sym[1][2] = 0.0;
+              grad_sym[2][1] = 0.0;
+            }
+            else if (fabs(nVec[2]) > lbound)
+            {
+              grad_sym[0][2] = 0.0;
+              grad_sym[1][2] = 0.0;
+              grad_sym[2][0] = 0.0;
+              grad_sym[2][1] = 0.0;
+            }
+            else
+            {
+              cout << "Warning, symmetry face not orthogonal to a coordinate axis, ";
+              cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
+            }
+
+            addViscFlux(Frhou, FrhoE, A0, NULL,
+                      rho[icv0],    vel[icv0],    grad_sym, enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  kine0,
+                      rho_bfa[ifa], vel_bfa[ifa], grad_sym, h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], kine1,
+                      nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, vel_bfa[ifa],
+                      area, nVec, smag, nVec, test1, test2, test3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction*/
+            /*
+            // should contribution to fluxes be included?
+            if (flagImplicit)
+            {
+              int noc00 = nbocv_i[icv0]; // icv0's diagonal
+
+              for (int i=1; i<5; i++)
+                for (int j=0; j<5; j++)
+                  A[noc00][i][j] -= A0[i][j];
+            }*/
+
+            for (int i = 0; i < 3; i++)
+              rhs_rhou[icv0][i] -= Frhou[i];
+
+            // viscous flux = 0 for energy equation
+
+            viscFlux[icv0][0] -= test1;
+            viscFlux[icv0][1] -= test2;
+            viscFlux[icv0][2] -= test3;
           }
+
         }
         // .............................................................................................
         // WALL BOUNDARY CONDITION

@@ -37,7 +37,6 @@
 
     ! Constants
     real(dp), parameter                     :: a0 = 2.5_dp
-    real(dp), parameter                     :: a01 = (2.1_dp - a0) / 2.0_dp
     real(dp), parameter                     :: pi = 3.14159265359_dp
 
     real(dp), parameter                     :: zero = 0.0_dp
@@ -56,7 +55,6 @@
                    0., 0., 1., 0., 0., 0., -1., 0., 0.,                        &
                    0., -1., 0., 1., 0., 0., 0., 0., 0./),(/3,3,3/))
     real(dp), parameter                     :: a_error = 1.0e-10_dp
-    real(dp), parameter                     :: r_small = 1.0e-14_dp
     
     ! Variables
     integer                  :: i,j,k,l,m,n   !do loop indices
@@ -294,46 +292,53 @@
     ! check for rotation
     purerotation: if (rotation) then
 
-        r_ratio = trace_wtwt/trace_stst
-
-        ! compute alpha and beta
-        if (r_ratio < one) then
-          alpha2 = one - sqrt(one - r_ratio)     !hyperbolic mean flow
-        else
-          alpha2 = one + sqrt(one - one/r_ratio) !elliptic mean flow
-        end if
-
-        if (alpha2 < zero) alpha2 = zero
-        alpha = sqrt(alpha2)
-        
-        term = 4.0_dp - 2.0_dp*alpha2
-        if (term < zero) term = zero
-        beta = 2.0_dp - sqrt(term)
-
-        c2 = alpha/norm_wt
-        c3 = beta/trace_wtwt
-        
-        ! compute rotation matrix h
-        do i = 1,3
-          do j = 1,3
-            h(i,j) = delta(i,j) + c2*wt(i,j) + c3*wtwt(i,j)
-          end do
+      trace_aa = zero
+      do i = 1,3
+        do j = 1,3
+          trace_aa = trace_aa + a(i,j)*a(j,i)
         end do
+      end do
 
-        ! compute ar
-        do i = 1,3
-          do j = i,3
+      r_ratio = trace_wtwt/trace_stst*(1.5_dp*(trace_aa - third))**half
 
-            a(i,j) = zero
-            do k = 1,3
-              do l = 1,3
-                a(i,j) = a(i,j) + h(i,k)*h(j,l)*as(k,l)
-              end do
+      ! compute alpha and beta
+      if (r_ratio < one) then
+        alpha2 = one - sqrt(one - r_ratio)     !hyperbolic mean flow
+      else
+        alpha2 = one + sqrt(one - one/r_ratio) !elliptic mean flow
+      end if
+
+      if (alpha2 < zero) alpha2 = zero
+      alpha = sqrt(alpha2)
+        
+      term = 4.0_dp - 2.0_dp*alpha2
+      if (term < zero) term = zero
+      beta = 2.0_dp - sqrt(term)
+
+      c2 = alpha/norm_wt
+      c3 = beta/trace_wtwt
+        
+      ! compute rotation matrix h
+      do i = 1,3
+        do j = 1,3
+          h(i,j) = delta(i,j) + c2*wt(i,j) + c3*wtwt(i,j)
+        end do
+      end do
+
+      ! compute ar
+      do i = 1,3
+        do j = i,3
+
+          a(i,j) = zero
+          do k = 1,3
+            do l = 1,3
+              a(i,j) = a(i,j) + h(i,k)*h(j,l)*as(k,l)
             end do
-
-            a(j,i) = a(i,j)
           end do
+
+          a(j,i) = a(i,j)
         end do
+      end do
 
     end if purerotation
 
@@ -533,12 +538,12 @@
     endif
 
     ! Output some useful data
-    cir(1,1) = h(1,1) !phi
-    cir(1,2) = h(2,2) !bet
-    cir(1,3) = h(3,3) !chi
+    cir(1,1) = phi
+    cir(1,2) = bet
+    cir(1,3) = chi
 
-    cir(2,1) = h(1,2) !eta_r
-    cir(2,2) = h(2,1) !eta_f
+    cir(2,1) = r_ratio
+    cir(2,2) = eta_r
     cir(2,3) = trace_aa
     
     cir(3,1) = vec_g(1)

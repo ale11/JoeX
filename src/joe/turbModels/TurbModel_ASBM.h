@@ -25,14 +25,6 @@ public: // constructor, destructor
     ar_diag       = NULL;     registerVector(ar_diag,       "ar_diag",       CV_DATA);
     ar_offdiag    = NULL;     registerVector(ar_offdiag,    "ar_offdiag",    CV_DATA);
 
-    etar          = NULL;     registerScalar(etar,          "etar",          CV_DATA);
-    etaf          = NULL;     registerScalar(etaf,          "etaf",          CV_DATA);
-    a2            = NULL;     registerScalar(a2,            "a2",            CV_DATA);
-
-    scal_phi      = NULL;     registerScalar(scal_phi,      "scal_phi",      CV_DATA);
-    scal_bet      = NULL;     registerScalar(scal_bet,      "scal_bet",      CV_DATA);
-    scal_chi      = NULL;     registerScalar(scal_chi,      "scal_chi",      CV_DATA);
-
     // Blocking variables
     block_diag    = NULL;     registerVector(block_diag,    "block_diag",    CV_DATA);
     block_offdiag = NULL;     registerVector(block_offdiag, "block_offdiag", CV_DATA);
@@ -42,8 +34,8 @@ public: // constructor, destructor
 
     // -------------------------------------------------------------------------------
     // Debugging variables
-    hatwt         = NULL;     registerScalar(hatwt,         "hatwt",         CV_DATA);
-    hatst         = NULL;     registerScalar(hatst,         "hatst",         CV_DATA);
+    debug1        = NULL;     registerVector(debug1,         "debug1",         CV_DATA);
+    debug2        = NULL;     registerVector(debug2,         "debug2",         CV_DATA);
     marker        = NULL;     // this is an integer array
     rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",  CV_DATA);
     rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
@@ -68,9 +60,6 @@ protected: // member variables
   double   (*ar_diag)[3];         // diagonal eddy axis tensor from st and wt
   double   (*ar_offdiag)[3];      // off-diagonal eddy axis tensor from st and wt
 
-  double   *etar, *etaf, *a2;
-  double   *scal_phi, *scal_bet, *scal_chi;
-
   // Blocking variables
   double   (*block_diag)[3];      // diagonal blockage tensor
   double   (*block_offdiag)[3];   // off-diagonal blockage tensor
@@ -90,7 +79,8 @@ protected: // member variables
   // -------------------------------------------------------------------------------
   // Debugging variables
   int *marker;
-  double *hatwt, *hatst;
+  double (*debug1)[3];
+  double (*debug2)[3];
   double (*rij_diag_nd)[3];
   double (*rij_offdiag_nd)[3];
   double (*dij_diag)[3];
@@ -280,14 +270,21 @@ public:   // member functions
              << " Cell-z: " << x_cv[icv][2] << endl;
       }
 
-      /*
-      REY[0][0] = 1.0/3.0 - 0.09*st_diag[icv][0];
-      REY[1][1] = 1.0/3.0 - 0.09*st_diag[icv][1];
-      REY[2][2] = 1.0/3.0 - 0.09*st_diag[icv][2];
-      REY[0][1] = -0.09*st_offdiag[icv][0];
-      REY[0][2] = -0.09*st_offdiag[icv][1];
-      REY[1][2] = -0.09*st_offdiag[icv][2];
-       */
+      /*//REY[0][0] = rij_diag[icv][0]/(-2.0*rho[icv]*kine[icv]);
+      //REY[1][1] = rij_diag[icv][1]/(-2.0*rho[icv]*kine[icv]);
+      //REY[2][2] = rij_diag[icv][2]/(-2.0*rho[icv]*kine[icv]);
+      //REY[0][1] = rij_offdiag[icv][0]/(-2.0*rho[icv]*kine[icv]);
+      //REY[0][2] = rij_offdiag[icv][1]/(-2.0*rho[icv]*kine[icv]);
+      REY[1][2] = rij_offdiag[icv][2]/(-2.0*rho[icv]*kine[icv]);
+
+      rij_diag[icv][0] = -REY[0][0]*2.0*kine[icv]*rho[icv];
+      rij_diag[icv][1] = -REY[1][1]*2.0*kine[icv]*rho[icv];
+      rij_diag[icv][2] = -REY[2][2]*2.0*kine[icv]*rho[icv];
+
+      rij_offdiag[icv][0] = -REY[0][1]*2.0*kine[icv]*rho[icv];
+      rij_offdiag[icv][1] = -REY[0][2]*2.0*kine[icv]*rho[icv];
+      //rij_offdiag[icv][2] = -REY[1][2]*2.0*kine[icv]*rho[icv];*/
+
       rij_diag[icv][0] = -REY[0][0]*2.0*kine[icv]*rho[icv];
       rij_diag[icv][1] = -REY[1][1]*2.0*kine[icv]*rho[icv];
       rij_diag[icv][2] = -REY[2][2]*2.0*kine[icv]*rho[icv];
@@ -304,18 +301,14 @@ public:   // member functions
       ar_diag[icv][1] = AR[1][1];       ar_offdiag[icv][1] = AR[0][2];
       ar_diag[icv][2] = AR[2][2];       ar_offdiag[icv][2] = AR[1][2];
 
-      scal_phi[icv] = CIR[0][0];
-      scal_bet[icv] = CIR[1][0];
-      scal_chi[icv] = CIR[2][0];
-
-      etar[icv] = CIR[0][1];
-      etaf[icv] = CIR[1][1];
-      a2[icv]   = CIR[2][1];
+      // debugging
+      debug1[icv][0] = CIR[0][0];       debug2[icv][0] = CIR[0][1];
+      debug1[icv][1] = CIR[1][0];       debug2[icv][1] = CIR[1][1];
+      debug1[icv][2] = CIR[2][0];       debug2[icv][2] = CIR[2][1];
 
       if (rij_offdiag[icv][0] != rij_offdiag[icv][0])
         marker[icv] = 1;
 
-      // extra stuff
       rij_diag_nd[icv][0] = REY[0][0];
       rij_diag_nd[icv][1] = REY[1][1];
       rij_diag_nd[icv][2] = REY[2][2];
@@ -671,14 +664,6 @@ public:   // member functions
 
     cout << "bphi: " << bphi[icv] << endl;
 
-    cout << "scal_phi: " << scal_phi[icv] << endl;
-    cout << "scal_bet: " << scal_bet[icv] << endl;
-    cout << "scal_chi: " << scal_chi[icv] << endl;
-
-    cout << "etar: " << etar[icv] << endl;
-    cout << "etaf: " << etaf[icv] << endl;
-    cout << "a2: " << a2[icv] << endl;
-
     cout << "rij_diag: " << rij_diag[icv][0] << endl;
     cout << "rij_diag: " << rij_diag[icv][1] << endl;
     cout << "rij_diag: " << rij_diag[icv][2] << endl;
@@ -836,11 +821,11 @@ public:
 
   virtual void calcRansTurbViscMuet()
   {
-    //    if (step == start_asbm){
-    //      for (int icv = 0; icv < ncv; icv++)
-    //        eps[icv] = 0.09*kine[icv]*omega[icv];
-    //      updateCvData(eps, REPLACE_DATA);
-    //    }
+  /*if (step == 50000){
+      for (int icv = 0; icv < ncv; icv++)
+        eps[icv] = kine[icv]*omega[icv];
+      updateCvData(eps, REPLACE_DATA);
+    }*/
 
     // update velocity gradients, timescale, lengthscale
     calcGradVel();
@@ -849,9 +834,11 @@ public:
     calcTurbLengthScale();
 
     // compute Reynolds stresses
+    //if (step == 50000){
     if ( step%block_frq == 0 )
       calcBlockTensor();
     calcRsCenterASBM();
+    //}
 
     // compute wall-normal stress
     if(VEL_SCALE==0)

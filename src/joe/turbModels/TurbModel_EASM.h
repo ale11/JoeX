@@ -9,12 +9,18 @@ public: // constructor, destructor
   RansTurbEASM()
   {
     cmus   = NULL;       registerScalar(cmus,   "cmus",   CV_DATA);
+
+    rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",  CV_DATA);
+    rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
   }
 
   virtual ~RansTurbEASM() {}
 
 public: // member variables
   double *cmus; ///< non-constant muT coefficient
+
+  double (*rij_diag_nd)[3];
+  double (*rij_offdiag_nd)[3];
 
 public:
   virtual void calcRsCenterEASM()
@@ -173,6 +179,14 @@ public:
       rij_offdiag[icv][0] = -r12*2.0*kine[icv]*rho[icv];
       rij_offdiag[icv][1] = -r13*2.0*kine[icv]*rho[icv];
       rij_offdiag[icv][2] = -r23*2.0*kine[icv]*rho[icv];
+
+      rij_diag_nd[icv][0] = max(r11,0.);
+      rij_diag_nd[icv][1] = max(r22,0.);
+      rij_diag_nd[icv][2] = max(r33,0.);
+
+      rij_offdiag_nd[icv][0] = r12;
+      rij_offdiag_nd[icv][1] = r13;
+      rij_offdiag_nd[icv][2] = r23;
     }
 
     updateCvData(cmus, REPLACE_DATA);

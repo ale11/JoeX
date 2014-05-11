@@ -476,14 +476,23 @@ public:
       if (mpi_rank == 0)
         cout << "calculating Rs Bouss" << endl;
       for (int icv = 0; icv < ncv; icv++)
-      {
+      {/*
         double term1 = (2.0/3.0) * rho[icv] * kine[icv];
         rij_diag[icv][0] = -term1 + muT[icv] * 2.0 * (grad_u[icv][0][0] - 1.0/3.0*diverg[icv]);
         rij_diag[icv][1] = -term1 + muT[icv] * 2.0 * (grad_u[icv][1][1] - 1.0/3.0*diverg[icv]);
         rij_diag[icv][2] = -term1 + muT[icv] * 2.0 * (grad_u[icv][2][2] - 1.0/3.0*diverg[icv]);
         rij_offdiag[icv][0] =     + muT[icv] * (grad_u[icv][0][1] + grad_u[icv][1][0]);
         rij_offdiag[icv][1] =     + muT[icv] * (grad_u[icv][0][2] + grad_u[icv][2][0]);
-        rij_offdiag[icv][2] =     + muT[icv] * (grad_u[icv][1][2] + grad_u[icv][2][1]);
+        rij_offdiag[icv][2] =     + muT[icv] * (grad_u[icv][1][2] + grad_u[icv][2][1]);*/
+
+
+        double term = -0.5/(rho[icv]*kine[icv]);
+        rij_diag[icv][0] = 1.0/3.0 + term*muT[icv] * 2.0 * (grad_u[icv][0][0] - 1.0/3.0*diverg[icv]);
+        rij_diag[icv][1] = 1.0/3.0 + term*muT[icv] * 2.0 * (grad_u[icv][1][1] - 1.0/3.0*diverg[icv]);
+        rij_diag[icv][2] = 1.0/3.0 + term*muT[icv] * 2.0 * (grad_u[icv][2][2] - 1.0/3.0*diverg[icv]);
+        rij_offdiag[icv][0] =       + term*muT[icv] * (grad_u[icv][0][1] + grad_u[icv][1][0]);
+        rij_offdiag[icv][1] =       + term*muT[icv] * (grad_u[icv][0][2] + grad_u[icv][2][0]);
+        rij_offdiag[icv][2] =       + term*muT[icv] * (grad_u[icv][1][2] + grad_u[icv][2][1]);
       }
     }
   }
