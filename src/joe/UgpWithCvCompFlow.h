@@ -358,16 +358,16 @@ public:   // constructors/destructors
         if (mpi_rank == 0)        cout << "LINEAR_SOLVER_NS: BCGSTAB" << endl;
         linearSolverNS = BCGSTAB;
       }
-			else if (name == "LUSGS")
-			{
-				if (mpi_rank == 0)        cout << "LINEAR_SOLVER_NS: LUSGS" << endl;
-				linearSolverNS = LUSGS;
-			}
-			else if (name == "BCGSTAB_LINELET")
-			{
-				if (mpi_rank == 0)        cout << "LINEAR_SOLVER_NS: BCGSTAB_LINELET" << endl;
-				linearSolverNS = BCGSTAB_LINELET;
-			}
+      else if (name == "LUSGS")
+      {
+        if (mpi_rank == 0)        cout << "LINEAR_SOLVER_NS: LUSGS" << endl;
+        linearSolverNS = LUSGS;
+      }
+      else if (name == "BCGSTAB_LINELET")
+      {
+        if (mpi_rank == 0)        cout << "LINEAR_SOLVER_NS: BCGSTAB_LINELET" << endl;
+        linearSolverNS = BCGSTAB_LINELET;
+      }
       else
       {
         if (mpi_rank == 0)        cerr << "Error: unrecognized LINEAR_SOLVER_NS: " << name << endl;
@@ -935,15 +935,15 @@ public:   // member functions
         solveCvVectorR5Bcgstab(phi, Ap, rhs, zeroAbs, zeroRel, maxIter, "NS-eq");   // solve the system
         break;
 				
-			case LUSGS:
-				
-				solveCvVectorR5Lusgs(phi, Ap, rhs, zeroAbs, zeroRel, maxIter, "NS-eq");
-				break;
-				
-			case BCGSTAB_LINELET:
-				
+      case LUSGS:
+
+        solveCvVectorR5Lusgs(phi, Ap, rhs, zeroAbs, zeroRel, maxIter, "NS-eq");
+        break;
+
+      case BCGSTAB_LINELET:
+
         solveCvVectorR5BcgstabLine(phi, Ap, rhs, zeroAbs, zeroRel, maxIter, "NS-eq");   // solve the system
-				break;
+        break;
 
       default:
         if (mpi_rank == 0)
@@ -966,6 +966,7 @@ public:   // member functions
           if (nbocv_v_global == NULL)
           {
             nbocv_v_global = new int[ncv_g];
+
             for (int icv = 0; icv < ncv; icv++)
               nbocv_v_global[icv] = cvora[mpi_rank] + icv;
             updateCvData(nbocv_v_global, REPLACE_DATA);
@@ -982,11 +983,11 @@ public:   // member functions
         solveCvScalarBcgstab(phi, Ap, rhs, zeroAbs, zeroRel, maxIter, scalarName);
         break;
 				
-			case LUSGS:
+      case LUSGS:
         solveCvScalarLusgs(phi, Ap, rhs, zeroAbs, zeroRel, maxIter, scalarName);
         break;
 				
-			case BCGSTAB_LINELET:
+      case BCGSTAB_LINELET:
         solveCvScalarBcgstabLine(phi, Ap, rhs, zeroAbs, zeroRel, maxIter, scalarName);
         break;
 

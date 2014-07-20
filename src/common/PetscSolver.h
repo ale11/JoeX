@@ -215,7 +215,7 @@ public:
   {
     setLinSysForPetsc(Ap, rhs, noora, nbono_i, nbono_v, nbono_v_gl);
 
-//    KSPSetOperators(ksp, A_, A_, DIFFERENT_NONZERO_PATTERN);
+    KSPSetOperators(ksp, A_, A_, DIFFERENT_NONZERO_PATTERN);
     KSPSolve(ksp, b_, x_);
 
     int nIter;
@@ -238,7 +238,7 @@ public:
       VecGetValues(x_, 1, &row, &phi[ino]);   // inefficient, check how to change in future
     }
 
-    //RENE KSPSetOperators(ksp, A_, A_, SAME_NONZERO_PATTERN);
+    //KSPSetOperators(ksp, A_, A_, SAME_NONZERO_PATTERN);
   }
 
 
@@ -281,6 +281,7 @@ public:
 
     setLinSysForPetscCoupled(Ap, rhs, noora, nbono_i, nbono_v, nbono_v_gl, m);
 
+    KSPSetOperators(ksp, A_, A_, DIFFERENT_NONZERO_PATTERN);
     KSPSolve(ksp, b_, x_);
 
     int nIter;
@@ -305,7 +306,7 @@ public:
       VecGetValues(x_, 1, &row, &phi[ino][i]);
     }
 
-    KSPSetOperators(ksp, A_, A_, SAME_NONZERO_PATTERN);
+    //KSPSetOperators(ksp, A_, A_, SAME_NONZERO_PATTERN);
   }
 
 

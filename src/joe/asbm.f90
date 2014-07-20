@@ -398,11 +398,12 @@
       ierr = 6
     end if
 
-    ! relative rotation rate and frame rotation rate vector
-    vec_wtt(1) = wtt(2,3)
-    vec_wtt(2) = wtt(3,1)
-    vec_wtt(3) = wtt(1,2)
+    ! mean + frame rate-of-rotation vector (half of vorticity vector)
+    vec_wtt(1) = wtt(3,2)
+    vec_wtt(2) = wtt(1,3)
+    vec_wtt(3) = wtt(2,1)
 
+    ! relative rate-of-rotation vector
     vec_wdt(1) = wft(3,2) - wt(3,2)
     vec_wdt(2) = wft(1,3) - wt(1,3)
     vec_wdt(3) = wft(2,1) - wt(2,1)
@@ -514,7 +515,7 @@
     if (rotation_t) then
     ! compute helical vector
       do k = 1,3
-        vec_g(k) = -scl_g*vec_wtt(k)/mag_vec_wtt
+        vec_g(k) = scl_g*vec_wtt(k)/mag_vec_wtt
       end do
     else
       do k = 1,3

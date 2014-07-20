@@ -2,6 +2,7 @@
 #define RANSTURBMODEL_ASBM_H
 
 #include "UgpWithCvCompFlow.h"
+#include "myMem.h"
 
 extern "C"{
   void asbm_(
@@ -34,9 +35,11 @@ public: // constructor, destructor
 
     // -------------------------------------------------------------------------------
     // Debugging variables
+    marker = NULL;     // this is an integer array
+
+    temp_muT      = NULL;     registerScalar(temp_muT,       "temp_muT",       CV_DATA);
     debug1        = NULL;     registerVector(debug1,         "debug1",         CV_DATA);
     debug2        = NULL;     registerVector(debug2,         "debug2",         CV_DATA);
-    marker        = NULL;     // this is an integer array
     rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",  CV_DATA);
     rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
     dij_diag      = NULL;     registerVector(dij_diag,       "dij_diag",     CV_DATA);
@@ -79,6 +82,8 @@ protected: // member variables
   // -------------------------------------------------------------------------------
   // Debugging variables
   int *marker;
+
+  double *temp_muT;
   double (*debug1)[3];
   double (*debug2)[3];
   double (*rij_diag_nd)[3];
@@ -271,19 +276,26 @@ public:   // member functions
       }
 
       /*//REY[0][0] = rij_diag[icv][0]/(-2.0*rho[icv]*kine[icv]);
-      //REY[1][1] = rij_diag[icv][1]/(-2.0*rho[icv]*kine[icv]);
-      //REY[2][2] = rij_diag[icv][2]/(-2.0*rho[icv]*kine[icv]);
+      REY[1][1] = rij_diag[icv][1]/(-2.0*rho[icv]*kine[icv]);
+      REY[2][2] = rij_diag[icv][2]/(-2.0*rho[icv]*kine[icv]);
       //REY[0][1] = rij_offdiag[icv][0]/(-2.0*rho[icv]*kine[icv]);
       //REY[0][2] = rij_offdiag[icv][1]/(-2.0*rho[icv]*kine[icv]);
       REY[1][2] = rij_offdiag[icv][2]/(-2.0*rho[icv]*kine[icv]);
 
       rij_diag[icv][0] = -REY[0][0]*2.0*kine[icv]*rho[icv];
-      rij_diag[icv][1] = -REY[1][1]*2.0*kine[icv]*rho[icv];
-      rij_diag[icv][2] = -REY[2][2]*2.0*kine[icv]*rho[icv];
+      //rij_diag[icv][1] = -REY[1][1]*2.0*kine[icv]*rho[icv];
+      //rij_diag[icv][2] = -REY[2][2]*2.0*kine[icv]*rho[icv];
 
       rij_offdiag[icv][0] = -REY[0][1]*2.0*kine[icv]*rho[icv];
       rij_offdiag[icv][1] = -REY[0][2]*2.0*kine[icv]*rho[icv];
       //rij_offdiag[icv][2] = -REY[1][2]*2.0*kine[icv]*rho[icv];*/
+
+      //REY[0][0] = 1.0/3.0 - temp_muT[icv]/(rho[icv]*kine[icv])*(grad_u[icv][0][0] - 1.0/3.0*diverg[icv]);
+      //REY[1][1] = 1.0/3.0 - temp_muT[icv]/(rho[icv]*kine[icv])*(grad_u[icv][1][1] - 1.0/3.0*diverg[icv]);
+      //REY[2][2] = 1.0/3.0 - temp_muT[icv]/(rho[icv]*kine[icv])*(grad_u[icv][2][2] - 1.0/3.0*diverg[icv]);
+      //REY[0][1] = -temp_muT[icv]/(rho[icv]*kine[icv])*0.5*(grad_u[icv][0][1] + grad_u[icv][1][0]);
+      //REY[0][2] = -temp_muT[icv]/(rho[icv]*kine[icv])*0.5*(grad_u[icv][0][2] + grad_u[icv][2][0]);
+      //REY[1][2] = -temp_muT[icv]/(rho[icv]*kine[icv])*0.5*(grad_u[icv][1][2] + grad_u[icv][2][1]);
 
       rij_diag[icv][0] = -REY[0][0]*2.0*kine[icv]*rho[icv];
       rij_diag[icv][1] = -REY[1][1]*2.0*kine[icv]*rho[icv];
@@ -388,11 +400,15 @@ public:   // member functions
     // =========================================================================================
     // compute A_block and rhs_block
     // =========================================================================================
-    static double *A_block   = new double[nbocv_s];
-    static double *rhs_block = new double[ncv];
+    char scalName[] = "bphi";
 
-    for (int icv = 0; icv < ncv; ++icv)   rhs_block[icv] = 0.0;
-    for (int noc = 0; noc < nbocv_s; noc++) A_block[noc] = 0.0;
+    double *A_block   = new double[nbocv_s];
+    double *rhs_block = new double[ncv];
+    double *buffer    = new double[ncv_g];
+
+    for (int icv = 0; icv < ncv; ++icv)     rhs_block[icv] = 0.0;
+    for (int noc = 0; noc < nbocv_s; noc++) A_block[noc]   = 0.0;
+    for (int icv = 0; icv < ncv_g; ++icv)   buffer[icv]    = 0.0;
 
     // ..........................................................................................
     // compute the viscous terms
@@ -402,20 +418,6 @@ public:   // member functions
     // ..........................................................................................
     // compute the source terms
     // ..........................................................................................
-
-    /*cout << "before centroids" << endl;
-    // norm of A matrix
-    double myAnorm = 0.0, Anorm = 0.0;
-    for (int noc = 0; noc < nbocv_s; noc++)
-      myAnorm += A_block[noc];
-    MPI_Reduce(&myAnorm,&Anorm,1,MPI_DOUBLE,MPI_SUM,0,mpi_comm);
-    if (mpi_rank == 0){
-        if (asbmInfo.is_open())
-          asbmInfo << "Anorm before: " << Anorm << endl;
-        else
-          cout << "Unable to write to asbmInfo.dat file." << endl;
-    }*/
-
     for (int icv = 0; icv < ncv; icv++)
     {
       int noc00 = nbocv_i[icv];
@@ -434,33 +436,26 @@ public:   // member functions
     // =========================================================================================
     // solve the linear system
     // =========================================================================================
+    // //norm of A matrix
+    //myAnorm = 0.0; Anorm = 0.0;
+    //for (int noc = 0; noc < nbocv_s; noc++)
+    //  myAnorm += A_block[noc];
+    //MPI_Reduce(&myAnorm,&Anorm,1,MPI_DOUBLE,MPI_SUM,0,mpi_comm);
+    //if (mpi_rank == 0){
+    //    if (asbmInfo.is_open())
+    //      asbmInfo << "Anorm after: " << Anorm << endl;
+    //    else
+    //      cout << "Unable to write to asbmInfo.dat file." << endl;
+    //}
 
-    char scalName[] = "bphi";
-
-    static double *bphi_temp = new double[ncv_g];
-    for (int icv = 0; icv < ncv; ++icv)
-      bphi_temp[icv] = bphi[icv];
-
-    /*// norm of A matrix
-    myAnorm = 0.0; Anorm = 0.0;
-    for (int noc = 0; noc < nbocv_s; noc++)
-      myAnorm += A_block[noc];
-    MPI_Reduce(&myAnorm,&Anorm,1,MPI_DOUBLE,MPI_SUM,0,mpi_comm);
-    if (mpi_rank == 0){
-        if (asbmInfo.is_open())
-          asbmInfo << "Anorm after: " << Anorm << endl;
-        else
-          cout << "Unable to write to asbmInfo.dat file." << endl;
-    }*/
-
-    solveLinSysScalar(bphi_temp, A_block, rhs_block, block_zeroAbs, block_zeroRel, block_maxIter, scalName);
+    solveLinSysScalar(buffer, A_block, rhs_block, block_zeroAbs, block_zeroRel, block_maxIter, scalName);
 
     // clipping
     for (int icv = 0; icv < ncv; ++icv)
-      bphi[icv] = min(max(bphi_temp[icv],0.0),1.0);
+      bphi[icv] = min(max(buffer[icv],0.0),1.0);
 
     updateCvData(bphi, REPLACE_DATA);
-
+    
     // compute residual
     double thisRes, myRes = 0.0, Res = 0.0;
     for (int icv = 0; icv < ncv; icv++)
@@ -480,7 +475,7 @@ public:   // member functions
       myRes += fabs(thisRes);
     }
     MPI_Reduce(&myRes,&Res,1,MPI_DOUBLE,MPI_SUM,0,mpi_comm);
-
+    
     // output for info
     if (mpi_rank == 0)
     {
@@ -494,11 +489,14 @@ public:   // member functions
         fprintf(finfo,"bphi resid: %12.6e\n",Res);
       }
     }
+    
+    delete [] A_block;
+    delete [] rhs_block;
+    delete [] buffer;
 
     // =========================================================================================
     // set the boundary conditions
     // =========================================================================================
-
     for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
     {
       if (zone->getKind() == FA_ZONE_BOUNDARY)
@@ -528,7 +526,6 @@ public:   // member functions
     // =========================================================================================
     // compute gradients, with boundary values
     // =========================================================================================
-
     calcCvScalarGrad(grad_bphi, bphi, bphi_bfa, gradreconstruction, limiterNavierS, bphi, epsilonSDWLS);
 
     // =========================================================================================
@@ -833,12 +830,12 @@ public:
     calcTurbTimeScale();
     calcTurbLengthScale();
 
-    // compute Reynolds stresses
-    //if (step == 50000){
+    // compute wall blocking tensor
     if ( step%block_frq == 0 )
       calcBlockTensor();
+
+    // compute Reynolds stresses
     calcRsCenterASBM();
-    //}
 
     // compute wall-normal stress
     if(VEL_SCALE==0)
@@ -1245,10 +1242,21 @@ public:
     calcTurbTimeScale();
     calcTurbLengthScale();
 
-    // compute Reynolds stresses
+    // eddy-viscosity at cell center
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double omega_tilde = max(omega[icv], cLim*strMag[icv]/sqrt(betaStar));
+      temp_muT[icv] = min(rho[icv]*kine[icv]/omega_tilde, 100.0);
+    }
+    
+    //if (step == 50000){
+    // compute wall blocking tensor
     if ( step%block_frq == 0 )
       calcBlockTensor();
+
+    // compute Reynolds stresses
     calcRsCenterASBM();
+    //}
 
     // eddy-viscosity at cell center
     for (int icv = 0; icv < ncv; icv++)

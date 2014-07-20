@@ -4466,13 +4466,14 @@ void JoeWithModels::runBackwardEulerCoupled()
   double incCFL = getParam("CFL_RAMP")->getDouble("FACTOR_CFL");
   double maxCFL = getParam("CFL_RAMP")->getDouble("MAX_CFL");
 
-	string SpaceIntName = getStringParam("SPACE_INTEGRATION","HLLC");
-	if (SpaceIntName == "JST") { 
-		PressSensor = new double[ncv_g]; Conserv_Und_Lapl = new double[ncv_g][5]; Lambda = new double[ncv_g];
-		BoundaryCV = new bool[ncv_g]; NeighborCV = new int[ncv_g];
-		p1_Und_Lapl = new double[ncv_g]; p2_Und_Lapl   = new double[ncv_g]; 
-		calcJSTCoeff_Const(0);
-	}
+  string SpaceIntName = getStringParam("SPACE_INTEGRATION","HLLC");
+  if (SpaceIntName == "JST")
+  {
+    PressSensor = new double[ncv_g]; Conserv_Und_Lapl = new double[ncv_g][5]; Lambda = new double[ncv_g];
+    BoundaryCV = new bool[ncv_g]; NeighborCV = new int[ncv_g];
+    p1_Und_Lapl = new double[ncv_g]; p2_Und_Lapl   = new double[ncv_g];
+    calcJSTCoeff_Const(0);
+  }
 
   // -------------------------------------------------------------------------------------------
   // update state properties: velocity, pressure, temperature, enthalpy, gamma and R
