@@ -545,4 +545,3 @@ for i = 1:length(d)
     ybary(i) = c1c(i)*0.0 + c2c(i)*0.0 + c3c(i)*0.866025;
 end
 end
-

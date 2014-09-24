@@ -34,7 +34,6 @@
     integer, intent(in)                     :: ktrmax  !max iters for N-R
     integer, intent(in)                     :: bltype  !wall blocking type 
     integer, intent(inout)                  :: ierr    !error flag
- 
 
     ! constants
     real(dp), parameter                     :: a0 = 1.4_dp
@@ -60,8 +59,8 @@
     ! variables
     integer                  :: i,j,k,l,m,n   !do loop indices
     integer                  :: ktr           !iteration index for N-R
-    integer                  :: id, idx       !indeces for N-R vector & matrix   
-    integer, dimension(3,3)  :: index =                                        & 
+    integer                  :: id, idx       !indeces for N-R vector & matrix
+    integer, dimension(3,3)  :: index =                                        &
       reshape((/1, 2, 3, 2, 4, 5, 3, 5, 6/),(/3, 3/))
 
     logical                  :: strain        !true for strained flows
@@ -70,7 +69,6 @@
     logical                  :: converged     !used for N-R solver
     
     real(dp), dimension(3,3) :: a             !eddy axis tensor
-    real(dp), dimension(3,3) :: ar_old        !input value for ar
     real(dp), dimension(3,3) :: wtt           !frame + mean rotation
     real(dp), dimension(3,3) :: stst          !st_ik*st_kj
     real(dp), dimension(3,3) :: wtwt          !wt_ik*wt_kj
@@ -346,7 +344,7 @@
       ! loop point for Newton-Rhapson (N-R) iteration
       converged = .false.
       ktr = 0
-      
+
       NewtonRhapson_ar: do while (.not.converged)
         ktr = ktr + 1
         ! perturbations
@@ -479,8 +477,8 @@
           do j = i,3
             id = index(i,j)
             x_nr(id) = x_nr(id) - a(i,j) !x_nr = -f(a_ij)
-              
-            ! initialize row in the matrix 
+
+            ! initialize row in the matrix
             do k = 1,6
               a_nr(id,k) = zero
             end do
@@ -489,8 +487,8 @@
             coefp = zero
             do k = 1,3
               do l = 1,3
-                coefp = coefp + ((coefa*wt(i,k) + coefb*wtwt(i,k))*h(j,l) +   &
-                                 (coefa*wt(j,l) + coefb*wtwt(j,l))*h(i,k))*   &
+                coefp = coefp + ((coefa*wt(i,k) + coefb*wtwt(i,k))*h(j,l) +    &
+                                 (coefa*wt(j,l) + coefb*wtwt(j,l))*h(i,k))*    &
                                 as(k,l)
               end do
             end do
@@ -541,7 +539,7 @@
           end do
           
           if (r_num < zero) then
-            r_num = zero
+            ! r_num = zero
             ! trying to reduce x depending on the flow. Arbitrary
             min_sw_ws = min( (trace_stst/trace_wtwt),(trace_wtwt/trace_stst) ) &
                         **fifth   
@@ -609,34 +607,12 @@
     if (trace_aa > one) then
       write(*,*) 'trace_aa = ', trace_aa, ' greater than one'
       trace_aa = one
-      !a(1,1) = one/sqrt(3.0_dp)
-      !a(2,1) = zero
-      !a(3,1) = zero
-
-      !a(1,2) = zero
-      !a(2,2) = one/sqrt(3.0_dp)
-      !a(3,2) = zero
-    
-      !a(1,3) = zero
-      !a(2,3) = zero
-      !a(3,3) = one/sqrt(3.0_dp)
       ierr = 6
     end if
     
     if (trace_aa < third) then
       write(*,*) 'trace_aa = ', trace_aa, ' less than third'
       trace_aa = third
-      !a(1,1) = third
-      !a(2,1) = zero
-      !a(3,1) = zero
-
-      !a(1,2) = zero
-      !a(2,2) = third
-      !a(3,2) = zero
-    
-      !a(1,3) = zero
-      !a(2,3) = zero
-      !a(3,3) = third
       ierr = 6
     end if
 
@@ -687,8 +663,8 @@
     if ((eta_c2 < zero) .or. (eta_c2 /= eta_c2)) eta_c2 = zero
 
     eta_r = sqrt(eta_c1)
-    eta_f = zero 
-    
+    eta_f = zero
+
     ! compute phis, chis, bets
     if (hat_st < zero) then
       ! without strain
@@ -771,7 +747,7 @@
                    dot_vec_wdt, rotation_t, delta, eps, ierr)
 
     ! Output some useful data
-    dmn = rey 
+    dmn = rey
 
     if (bltype == 1) then
       ! blockage correction to Reynolds stress tensor
@@ -942,7 +918,7 @@
     else if (eta_f < one) then
       phi1 = one - eta_f
       chi1 = zero
-      !chi1 = fifth + (one - fifth)*                                            &
+      !chi1 = fifth + (one - fifth)*                                           &
       !       (one - (one - eta_f)**2/(one + 3.0_dp*eta_f/oma))
       bet1 = one
     else
@@ -1047,7 +1023,7 @@
     ! check for bad data
     if (trace_bl > one) then
       ierr = 7
-      return 
+      return
     end if
 
     ah = a
@@ -1239,9 +1215,9 @@
         cir(j,i) = cir(i,j)
       end do
     end do
-    
+
   end subroutine structure
-        
+
 !================================= LINSOLVER =================================80
 !
 ! Double precision linear algebraic equation solver.
@@ -1270,7 +1246,7 @@
     integer, intent(inout)                        :: ierr   !error flag
     real(dp), dimension(ndim,ndim), intent(inout) :: a      !matrix
     real(dp), dimension(ndim), intent(inout)      :: b      !vector
-    
+
     ! constants
     real(dp), parameter :: zero = 0.0_dp
     real(dp), parameter :: one = 1.0_dp

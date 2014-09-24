@@ -24,8 +24,8 @@ void JoeWithModels::run()
 
         // initialize Navier-Stokes equations
         initialHook();
-	
-	// initialize Linelet for preconditioning
+
+  // initialize Linelet for preconditioning
 	string SolverName = getStringParam("LINEAR_SOLVER_NS");
 	string SemiName   = getStringParam("SEMICOARSENING","NO");
 	if ((SolverName == "BCGSTAB_LINELET") || (SemiName == "YES")) initializeLinelet();
@@ -3774,34 +3774,42 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             double test2 = 0;
             double test3 = 0;
 
-            double grad_sym[3][3] = {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
+            double grad_u_sym[3][3] = {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
 
-            grad_sym[0][0] = grad_u[icv0][0][0];   grad_sym[0][1] = grad_u[icv0][0][1];   grad_sym[0][2] = grad_u[icv0][0][2];
-            grad_sym[1][0] = grad_u[icv0][1][0];   grad_sym[1][1] = grad_u[icv0][1][1];   grad_sym[1][2] = grad_u[icv0][1][2];
-            grad_sym[2][0] = grad_u[icv0][2][0];   grad_sym[2][1] = grad_u[icv0][2][1];   grad_sym[2][2] = grad_u[icv0][2][2];
+            grad_u_sym[0][0] = grad_u[icv0][0][0];
+            grad_u_sym[0][1] = grad_u[icv0][0][1];
+            grad_u_sym[0][2] = grad_u[icv0][0][2];
+
+            grad_u_sym[1][0] = grad_u[icv0][1][0];
+            grad_u_sym[1][1] = grad_u[icv0][1][1];
+            grad_u_sym[1][2] = grad_u[icv0][1][2];
+
+            grad_u_sym[2][0] = grad_u[icv0][2][0];
+            grad_u_sym[2][1] = grad_u[icv0][2][1];
+            grad_u_sym[2][2] = grad_u[icv0][2][2];
 
             double lbound = 0.999999;
 
             if (fabs(nVec[0]) > lbound)
             {
-              grad_sym[0][1] = 0.0;
-              grad_sym[0][2] = 0.0;
-              grad_sym[1][0] = 0.0;
-              grad_sym[2][0] = 0.0;
+              grad_u_sym[0][1] = 0.0;
+              grad_u_sym[0][2] = 0.0;
+              grad_u_sym[1][0] = 0.0;
+              grad_u_sym[2][0] = 0.0;
             }
             else if (fabs(nVec[1]) > lbound)
             {
-              grad_sym[0][1] = 0.0;
-              grad_sym[1][0] = 0.0;
-              grad_sym[1][2] = 0.0;
-              grad_sym[2][1] = 0.0;
+              grad_u_sym[0][1] = 0.0;
+              grad_u_sym[1][0] = 0.0;
+              grad_u_sym[1][2] = 0.0;
+              grad_u_sym[2][1] = 0.0;
             }
             else if (fabs(nVec[2]) > lbound)
             {
-              grad_sym[0][2] = 0.0;
-              grad_sym[1][2] = 0.0;
-              grad_sym[2][0] = 0.0;
-              grad_sym[2][1] = 0.0;
+              grad_u_sym[0][2] = 0.0;
+              grad_u_sym[1][2] = 0.0;
+              grad_u_sym[2][0] = 0.0;
+              grad_u_sym[2][1] = 0.0;
             }
             else
             {
@@ -3810,8 +3818,8 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             }
 
             addViscFlux(Frhou, FrhoE, A0, NULL,
-                      rho[icv0],    vel[icv0],    grad_sym, enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  kine0,
-                      rho_bfa[ifa], vel_bfa[ifa], grad_sym, h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], kine1,
+                      rho[icv0],    vel[icv0],    grad_u_sym, enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  kine0,
+                      rho_bfa[ifa], vel_bfa[ifa], grad_u_sym, h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], kine1,
                       nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, vel_bfa[ifa],
                       area, nVec, smag, nVec, test1, test2, test3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction*/
             /*
@@ -3825,9 +3833,9 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
                   A[noc00][i][j] -= A0[i][j];
             }*/
 
-            for (int i = 0; i < 3; i++)
-              rhs_rhou[icv0][i] -= Frhou[i];
-
+            rhs_rhou[icv0][0] -= Frhou[0];
+            rhs_rhou[icv0][1] -= Frhou[1];
+            rhs_rhou[icv0][2] -= Frhou[2];
             // viscous flux = 0 for energy equation
 
             viscFlux[icv0][0] -= test1;
@@ -5403,53 +5411,99 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               }
             }
 
-            // Viscous flux: only 2/3 viscosity times trace of strain rate tensor and 2/3 * rho * kine
             // Viscous flux
             if (mu_ref > 0.0)
             {
-              double tauTurbij_nj[3];
-              double Skk = grad_u[icv0][0][0] + grad_u[icv0][1][1] + grad_u[icv0][2][2];
+              double sVec[3] = {0.0, 0.0, 0.0};
+              vecMinVec3d(sVec, x_fa[ifa], x_cv[icv0]);
+              double smag = fabs(vecDotVec3d(sVec, nVec));
+              double alpha = 1.0;
 
-              // Laminar fluxes: -2/3*mul*Skk*deltaij
-              // double tmp = -2.0/3.0 * mul_fa[ifa] * Skk;
-              // Turbulent fluxes: -2/3*mut*Skk*deltaij
-              // tmp -= (1.0 - nonLinear[ifa]) * 2.0/3.0 * mut_fa[ifa] * Skk;
-              // -2/3*rho*k (only for Boussinesq turb models)
-              double tmp = 0.0;
-              if (turbModel > NONE)
-                tmp -= 2.0/3.0 * rho_bfa[ifa] * kineFA;
+              for (int iScal = 0; iScal < nScal; iScal++)
+              {
+                diffScal[iScal] = scalarTranspEqVector[iScal].diff[ifa];
+                for (int i = 0; i < 3; i++)
+                  gradScal0[iScal][i] = 0.0;
+              }
 
-              tauTurbij_nj[0] = tmp*nVec[0];
-              tauTurbij_nj[1] = tmp*nVec[1];
-              tauTurbij_nj[2] = tmp*nVec[2];
+              double kine0 = 0.0;
+              double kine1 = 0.0;
+              double kine_fa = 0.0;
+              if (kine_Index > -1)
+              {
+                double *phi = scalarTranspEqVector[kine_Index].phi;
+                double *phi_bfa = scalarTranspEqVector[kine_Index].phi_bfa;
+                kine0 = phi[icv0];
+                kine1 = phi_bfa[ifa];
+                kine_fa = kine1;
+              }
 
-              // Nonlinear Reynolds stresses
-              //tauTurbij_nj[0] += nonLinear[ifa]*(rij_diag_fa[ifa][0]*nVec[0]
-              //                                 + rij_offdiag_fa[ifa][0]*nVec[1]
-              //                                 + rij_offdiag_fa[ifa][1]*nVec[2]);
+              double grad_u_sym[3][3] = {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
 
-              //tauTurbij_nj[1] += nonLinear[ifa]*(rij_offdiag_fa[ifa][0]*nVec[0]
-              //                                 + rij_diag_fa[ifa][1]*nVec[1]
-              //                                 + rij_offdiag_fa[ifa][2]*nVec[2]);
+              grad_u_sym[0][0] = grad_u[icv0][0][0];
+              grad_u_sym[0][1] = grad_u[icv0][0][1];
+              grad_u_sym[0][2] = grad_u[icv0][0][2];
 
-              //tauTurbij_nj[2] += nonLinear[ifa]*(rij_offdiag_fa[ifa][1]*nVec[0]
-              //                                 + rij_offdiag_fa[ifa][2]*nVec[1]
-              //                                 + rij_diag_fa[ifa][2]*nVec[2]);
+              grad_u_sym[1][0] = grad_u[icv0][1][0];
+              grad_u_sym[1][1] = grad_u[icv0][1][1];
+              grad_u_sym[1][2] = grad_u[icv0][1][2];
 
-              rhs[icv0][1] += area*tauTurbij_nj[0];
-              rhs[icv0][2] += area*tauTurbij_nj[1];
-              rhs[icv0][3] += area*tauTurbij_nj[2];
-              
-              viscFlux[icv0][0] += area*tauTurbij_nj[0];
-              viscFlux[icv0][1] += area*tauTurbij_nj[1];
-              viscFlux[icv0][2] += area*tauTurbij_nj[2];
+              grad_u_sym[2][0] = grad_u[icv0][2][0];
+              grad_u_sym[2][1] = grad_u[icv0][2][1];
+              grad_u_sym[2][2] = grad_u[icv0][2][2];
+
+              double lbound = 0.999999;
+
+              if (fabs(nVec[0]) > lbound)
+              {
+                grad_u_sym[0][1] = 0.0;
+                grad_u_sym[0][2] = 0.0;
+                grad_u_sym[1][0] = 0.0;
+                grad_u_sym[2][0] = 0.0;
+              }
+              else if (fabs(nVec[1]) > lbound)
+              {
+                grad_u_sym[0][1] = 0.0;
+                grad_u_sym[1][0] = 0.0;
+                grad_u_sym[1][2] = 0.0;
+                grad_u_sym[2][1] = 0.0;
+              }
+              else if (fabs(nVec[2]) > lbound)
+              {
+                grad_u_sym[0][2] = 0.0;
+                grad_u_sym[1][2] = 0.0;
+                grad_u_sym[2][0] = 0.0;
+                grad_u_sym[2][1] = 0.0;
+              }
+              else
+              {
+                cout << "Warning, symmetry face not orthogonal to a coordinate axis, ";
+                cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
+              }
+
+              double temp1 = 0.0;
+              double temp2 = 0.0;
+              double temp3 = 0.0;
+              calcViscousFluxCoupled(ViscousFlux, A0, A1,
+                         rho[icv0],    vel[icv0],    grad_u_sym, enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  Scalar0, gradScal0, dpress_dscal0, kine0,
+                         rho_bfa[ifa], vel_bfa[ifa], grad_u_sym, h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kine1,
+                         nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, vel_bfa[ifa], diffScal, DiffTerm,
+                         area, nVec, smag, nVec, alpha, nScal, temp1, temp2, temp3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
+
+              rhs[icv0][1] -= ViscousFlux[1];
+              rhs[icv0][2] -= ViscousFlux[2];
+              rhs[icv0][3] -= ViscousFlux[3];
+              // viscous flux = 0 for energy equation and turb scalars
+
+              viscFlux[icv0][0] -= temp1;
+              viscFlux[icv0][1] -= temp2;
+              viscFlux[icv0][2] -= temp3;
 
               if (flagImplicit)
               {
                 // No implicit term considered here!
               }
             }
-            
           }
         }
         

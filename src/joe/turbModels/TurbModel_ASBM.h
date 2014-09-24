@@ -336,6 +336,8 @@ public:   // member functions
       dij_offdiag[icv][0] = DIM[0][1];
       dij_offdiag[icv][1] = DIM[0][2];
       dij_offdiag[icv][2] = DIM[1][2];
+
+      linearizeASBMstress(icv);
     }
 
     updateCvData(rij_diag, REPLACE_ROTATE_DATA);
@@ -680,11 +682,471 @@ public:   // member functions
 
   virtual void finalHookScalarRansTurbModel()
   {
-    if (marker    != NULL) {delete [] marker;       marker    = NULL;}
+  	if (marker    != NULL) {delete [] marker;       marker    = NULL;}
     if (bphi_bfa  != NULL) {delete [] bphi_bfa;     bphi_bfa  = NULL;}
     if (grad_bphi != NULL) {delete [] grad_bphi;    grad_bphi = NULL;}
     if (mpi_rank == 0) fclose(finfo);
   }
+
+  void linearizeASBMstress(int icv)
+  {
+  	//###############################################################
+  	//Compute eigenvectors/scalars for ASBM stresses
+    //###############################################################
+    double aij[3][3], eigv[3][3], eigs[3], eigsnew[3][3];
+    int order[3];
+
+    // open variables for eigenvalue and anisotropy tensor
+    for (int i=0; i < 3; i++)
+    {
+      for (int j=0; j < 3; j++)
+      {
+      	aij[i][j] = 0.0;
+      	eigv[i][j] = 0.0;
+      	eigsnew[i][j] = 0.0;
+      }
+      eigs[i] = 0.0;
+      order[i] = 0;
+    }
+
+    // compute the anisotropy
+    aij[0][0] = rij_diag_nd[icv][0] - 1.0/3.0;
+    aij[1][1] = rij_diag_nd[icv][1] - 1.0/3.0;
+    aij[2][2] = rij_diag_nd[icv][2] - 1.0/3.0;
+    aij[0][1] = rij_offdiag_nd[icv][0];
+    aij[0][2] = rij_offdiag_nd[icv][1];
+    aij[1][2] = rij_offdiag_nd[icv][2];
+    aij[1][0] = aij[0][1];
+    aij[2][0] = aij[0][2];
+    aij[2][1] = aij[1][2];
+
+    //aij tensor now built - build barycentric map locations
+    //compute eigenvalues of aij
+    eigen_decomposition(aij,eigv,eigs);
+
+    //sort eigenvalues by magnitude, save ordering in 'order'
+    if ((eigs[0] >= eigs[1]) && (eigs[0] >= eigs[2]))
+    {
+    	order[0] = 0;
+      order[1] = 1;
+      order[2] = 2;
+      if (eigs[2] >= eigs[1])
+      {
+      	order[1] = 2;
+      	order[2] = 1;
+      }
+    }
+    if ((eigs[1] >= eigs[0]) && (eigs[1] >= eigs[2]))
+    {
+    	order[0] = 1;
+    	order[1] = 0;
+    	order[2] = 2;
+    	if (eigs[2] >= eigs[0])
+    	{
+    		order[1] = 2;
+    		order[2] = 0;
+    	}
+    }
+    if ((eigs[2] >= eigs[0]) && (eigs[2] >= eigs[1]))
+    {
+    	order[0] = 2;
+    	order[1] = 0;
+    	order[2] = 1;
+    	if (eigs[1] >= eigs[0])
+    	{
+    		order[1] = 1;
+    		order[2] = 0;
+    	}
+    }
+
+    //store eigenvalues in order
+    eigsnew[0][0] = eigs[order[0]];
+    eigsnew[1][1] = eigs[order[1]];
+    eigsnew[2][2] = eigs[order[2]];
+
+    //###############################################################
+    // Compute eigenvectors/scalars for EVM stresses
+    //###############################################################
+    double aijEVM[3][3], eigvEVM[3][3], eigvnewEVM[3][3], eigvtEVM[3][3], eigsEVM[3];
+    int orderEVM[3];
+
+    // open variables for eigenvalue and anisotropy tensor
+    for (int i=0; i < 3; i++)
+    {
+      for (int j=0; j < 3; j++)
+      {
+      	aijEVM[i][j] = 0.0;
+      	eigvEVM[i][j] = 0.0;
+      }
+      eigsEVM[i] = 0.0;
+      orderEVM[i] = 0;
+    }
+
+    // compute the anisotorpy
+    double s00 = grad_u[icv][0][0] - 1.0/3.0*diverg[icv];
+    double s11 = grad_u[icv][1][1] - 1.0/3.0*diverg[icv];
+    double s22 = grad_u[icv][2][2] - 1.0/3.0*diverg[icv];
+    double s01 = 0.5*(grad_u[icv][0][1] + grad_u[icv][1][0]);
+    double s02 = 0.5*(grad_u[icv][0][2] + grad_u[icv][2][0]);
+    double s12 = 0.5*(grad_u[icv][1][2] + grad_u[icv][2][1]);
+
+    double tau_factor = turbTS[icv]/3.0;                    //for ASBM-ke
+    //double tau_factor = temp_muT[icv]/(rho[icv]*kine[icv]);   //for ASBM-kw
+    aijEVM[0][0] = -tau_factor*s00;
+    aijEVM[1][1] = -tau_factor*s11;
+    aijEVM[2][2] = -tau_factor*s22;
+    aijEVM[0][1] = -tau_factor*s01;
+    aijEVM[0][2] = -tau_factor*s02;
+    aijEVM[1][2] = -tau_factor*s12;
+    aijEVM[1][0] = aijEVM[0][1];
+    aijEVM[2][0] = aijEVM[0][2];
+    aijEVM[2][1] = aijEVM[1][2];
+
+    //aij tensor now built - build barycentric map locations
+    //compute eigenvalues of aij
+    eigen_decomposition(aijEVM,eigvEVM,eigsEVM);
+
+    //sort eigenvalues by magnitude, save ordering in 'order'
+    if ((eigsEVM[0] >= eigsEVM[1]) && (eigsEVM[0] >= eigsEVM[2]))
+    {
+      orderEVM[0] = 0;
+      orderEVM[1] = 1;
+      orderEVM[2] = 2;
+      if (eigsEVM[2] >= eigsEVM[1])
+      {
+      	orderEVM[1] = 2;
+      	orderEVM[2] = 1;
+      }
+    }
+    if ((eigsEVM[1] >= eigsEVM[0]) && (eigsEVM[1] >= eigsEVM[2]))
+    {
+      orderEVM[0] = 1;
+      orderEVM[1] = 0;
+      orderEVM[2] = 2;
+      if (eigsEVM[2] >= eigsEVM[0])
+      {
+      	orderEVM[1] = 2;
+      	orderEVM[2] = 0;
+      }
+    }
+    if ((eigsEVM[2] >= eigsEVM[0]) && (eigsEVM[2] >= eigsEVM[1]))
+    {
+      orderEVM[0] = 2;
+      orderEVM[1] = 0;
+      orderEVM[2] = 1;
+      if (eigsEVM[1] >= eigsEVM[0])
+      {
+      	orderEVM[1] = 1;
+      	orderEVM[2] = 0;
+      }
+    }
+
+    //store eigenvectors in order
+    for (int i = 0; i < 3; i++)
+    {
+      eigvnewEVM[i][0] = eigvEVM[i][orderEVM[0]];
+      eigvnewEVM[i][1] = eigvEVM[i][orderEVM[1]];
+      eigvnewEVM[i][2] = eigvEVM[i][orderEVM[2]];
+    }
+
+    //generate transpose
+    for (int i=0; i < 3; i++)
+    	for (int j=0; j < 3; j++)
+    		eigvtEVM[j][i] = eigvnewEVM[i][j];
+
+
+    //###############################################################
+    // Compute new Reynolds stresses
+    //###############################################################
+    //eigsnew[0][0] = eigsEVM[orderEVM[0]];
+    //eigsnew[1][1] = eigsEVM[orderEVM[1]];
+    //eigsnew[2][2] = eigsEVM[orderEVM[2]];
+
+    double rij[3][3], rijt[3][3];
+    matMult(rijt,eigvnewEVM,eigsnew);
+    matMult(rij,rijt,eigvtEVM);
+
+    rij[0][0] += 1.0/3.0;
+    rij[1][1] += 1.0/3.0;
+    rij[2][2] += 1.0/3.0;
+
+    rij_diag[icv][0] = -rij[0][0]*2.0*kine[icv]*rho[icv];
+    rij_diag[icv][1] = -rij[1][1]*2.0*kine[icv]*rho[icv];
+    rij_diag[icv][2] = -rij[2][2]*2.0*kine[icv]*rho[icv];
+
+    rij_offdiag[icv][0] = -rij[0][1]*2.0*kine[icv]*rho[icv];
+    rij_offdiag[icv][1] = -rij[0][2]*2.0*kine[icv]*rho[icv];
+    rij_offdiag[icv][2] = -rij[1][2]*2.0*kine[icv]*rho[icv];
+  }
+
+  // ###################################################################
+  // The files below are used for computing eigenvalues and eigenvectors
+  // ###################################################################
+
+  void matMult(double (*res)[3], double (*m1)[3], double (*m2)[3])  // m1*m2 matrices
+   {
+     for (int i=0; i<3; i++)
+       for (int j=0; j<3; j++)
+         {
+           res[i][j] = 0.0;
+           for (int k=0; k<3; k++)
+             res[i][j] += m1[i][k]*m2[k][j];
+         }
+   }
+
+   //these routiens are for computing the eigenvalue decomposition
+   static double hypot2(double x, double y)
+   {
+     return sqrt(x*x+y*y);
+   }
+
+   static void tred2(double V[3][3], double d[3], double e[3]) {
+
+     //  This is derived from the Algol procedures tred2 by
+     //  Bowdler, Martin, Reinsch, and Wilkinson, Handbook for
+     //  Auto. Comp., Vol.ii-Linear Algebra, and the corresponding
+     //  Fortran subroutine in EISPACK.
+
+     for (int j = 0; j < 3; j++) {
+       d[j] = V[3-1][j];
+     }
+
+     // Householder reduction to tridiagonal form.
+
+     for (int i = 3-1; i > 0; i--) {
+
+       // Scale to avoid under/overflow.
+
+       double scale = 0.0;
+       double h = 0.0;
+       for (int k = 0; k < i; k++) {
+         scale = scale + fabs(d[k]);
+       }
+       if (scale == 0.0) {
+         e[i] = d[i-1];
+         for (int j = 0; j < i; j++) {
+           d[j] = V[i-1][j];
+           V[i][j] = 0.0;
+           V[j][i] = 0.0;
+         }
+       } else {
+
+         // Generate Householder vector.
+
+         for (int k = 0; k < i; k++) {
+           d[k] /= scale;
+           h += d[k] * d[k];
+         }
+         double f = d[i-1];
+         double g = sqrt(h);
+         if (f > 0) {
+           g = -g;
+         }
+         e[i] = scale * g;
+         h = h - f * g;
+         d[i-1] = f - g;
+         for (int j = 0; j < i; j++) {
+           e[j] = 0.0;
+         }
+
+         // Apply similarity transformation to remaining columns.
+
+         for (int j = 0; j < i; j++) {
+           f = d[j];
+           V[j][i] = f;
+           g = e[j] + V[j][j] * f;
+           for (int k = j+1; k <= i-1; k++) {
+             g += V[k][j] * d[k];
+             e[k] += V[k][j] * f;
+           }
+           e[j] = g;
+         }
+         f = 0.0;
+         for (int j = 0; j < i; j++) {
+           e[j] /= h;
+           f += e[j] * d[j];
+         }
+         double hh = f / (h + h);
+         for (int j = 0; j < i; j++) {
+           e[j] -= hh * d[j];
+         }
+         for (int j = 0; j < i; j++) {
+           f = d[j];
+           g = e[j];
+           for (int k = j; k <= i-1; k++) {
+             V[k][j] -= (f * e[k] + g * d[k]);
+           }
+           d[j] = V[i-1][j];
+           V[i][j] = 0.0;
+         }
+       }
+       d[i] = h;
+     }
+
+     // Accumulate transformations.
+
+     for (int i = 0; i < 3-1; i++) {
+       V[3-1][i] = V[i][i];
+       V[i][i] = 1.0;
+       double h = d[i+1];
+       if (h != 0.0) {
+         for (int k = 0; k <= i; k++) {
+           d[k] = V[k][i+1] / h;
+         }
+         for (int j = 0; j <= i; j++) {
+           double g = 0.0;
+           for (int k = 0; k <= i; k++) {
+             g += V[k][i+1] * V[k][j];
+           }
+           for (int k = 0; k <= i; k++) {
+             V[k][j] -= g * d[k];
+           }
+         }
+       }
+       for (int k = 0; k <= i; k++) {
+         V[k][i+1] = 0.0;
+       }
+     }
+     for (int j = 0; j < 3; j++) {
+       d[j] = V[3-1][j];
+       V[3-1][j] = 0.0;
+     }
+     V[3-1][3-1] = 1.0;
+     e[0] = 0.0;
+   }
+         // Symmetric tridiagonal QL algorithm.
+
+   static void tql2(double V[3][3], double d[3], double e[3]) {
+
+                 //  This is derived from the Algol procedures tql2, by
+                 //  Bowdler, Martin, Reinsch, and Wilkinson, Handbook for
+                 //  Auto. Comp., Vol.ii-Linear Algebra, and the corresponding
+                 //  Fortran subroutine in EISPACK.
+
+                 for (int i = 1; i < 3; i++) {
+                         e[i-1] = e[i];
+                 }
+                 e[3-1] = 0.0;
+
+                 double f = 0.0;
+                 double tst1 = 0.0;
+                 double eps = pow(2.0,-52.0);
+                 for (int l = 0; l < 3; l++) {
+
+                         // Find small subdiagonal element
+
+                         tst1 = max(tst1,(fabs(d[l]) + fabs(e[l])));
+                         int m = l;
+                         while (m < 3) {
+                                 if (fabs(e[m]) <= eps*tst1) {
+                                         break;
+                                 }
+                                 m++;
+                         }
+
+                         // If m == l, d[l] is an eigenvalue,
+                         // otherwise, iterate.
+
+                         if (m > l) {
+                                 int iter = 0;
+                                 do {
+                                         iter = iter + 1;  // (Could check iteration count here.)
+
+                                         // Compute implicit shift
+
+                                         double g = d[l];
+                                         double p = (d[l+1] - g) / (2.0 * e[l]);
+                                         double r = hypot2(p,1.0);
+                                         if (p < 0) {
+                                                 r = -r;
+                                         }
+                                         d[l] = e[l] / (p + r);
+                                         d[l+1] = e[l] * (p + r);
+                                         double dl1 = d[l+1];
+                                         double h = g - d[l];
+                                         for (int i = l+2; i < 3; i++) {
+                                                 d[i] -= h;
+                                         }
+                                         f = f + h;
+
+                                         // Implicit QL transformation.
+
+                                         p = d[m];
+                                         double c = 1.0;
+                                         double c2 = c;
+                                         double c3 = c;
+                                         double el1 = e[l+1];
+                                         double s = 0.0;
+                                         double s2 = 0.0;
+                                         for (int i = m-1; i >= l; i--) {
+                                                 c3 = c2;
+                                                 c2 = c;
+                                                 s2 = s;
+                                                 g = c * e[i];
+                                                 h = c * p;
+                                                 r = hypot2(p,e[i]);
+                                                 e[i+1] = s * r;
+                                                 s = e[i] / r;
+                                                 c = p / r;
+                                                 p = c * d[i] - s * g;
+                                                 d[i+1] = h + s * (c * g + s * d[i]);
+
+                                                 // Accumulate transformation.
+
+                                                 for (int k = 0; k < 3; k++) {
+                                                         h = V[k][i+1];
+                                                         V[k][i+1] = s * V[k][i] + c * h;
+                                                         V[k][i] = c * V[k][i] - s * h;
+                                                 }
+                                         }
+                                         p = -s * s2 * c3 * el1 * e[l] / dl1;
+                                         e[l] = s * p;
+                                         d[l] = c * p;
+
+                                         // Check for convergence.
+
+                                 } while (fabs(e[l]) > eps*tst1);
+                         }
+                         d[l] = d[l] + f;
+                         e[l] = 0.0;
+                 }
+
+                 // Sort eigenvalues and corresponding vectors.
+
+                 for (int i = 0; i < 3-1; i++) {
+                         int k = i;
+                         double p = d[i];
+                         for (int j = i+1; j < 3; j++) {
+                                 if (d[j] < p) {
+                                         k = j;
+                                         p = d[j];
+                                 }
+                         }
+                         if (k != i) {
+                                 d[k] = d[i];
+                                 d[i] = p;
+                                 for (int j = 0; j < 3; j++) {
+                                         p = V[j][i];
+                                         V[j][i] = V[j][k];
+                                         V[j][k] = p;
+                                 }
+                         }
+                 }
+         }
+
+   void eigen_decomposition(double A[3][3], double V[3][3], double d[3])
+   {
+     double e[3];
+     for (int i = 0; i < 3; i++) {
+       for (int j = 0; j < 3; j++) {
+         V[i][j] = A[i][j];
+       }
+     }
+     tred2(V, d, e);
+     tql2(V, d, e);
+   }
+
+
 };
 
 //######################################################//
@@ -753,11 +1215,11 @@ public:
 
 public:
 
-  double *eps, *omega, *v2;                          ///< introduced to have access to variables, results into more readable code
-  double *kine_bfa, *eps_bfa;                        ///< turbulent scalars at the boundary
-  double *muT;                                       ///< turbulent viscosity at cell center for output
+  double *eps, *omega, *v2;   // turb scalars
+  double *kine_bfa, *eps_bfa; // turb scalars at boundary
+  double *muT;                // turb visc at cell center
 
-  double C_MU, SIG_K, SIG_D, CEPS1, CEPS2, CETA, CL; ///< model constants
+  double C_MU, SIG_K, SIG_D, CEPS1, CEPS2, CETA, CL; // model constants
 
   double *tturb, *tkol, *trel, *lkol, *lrel, *lturb;
 
@@ -770,13 +1232,18 @@ public:
       cout << "initialHook() for ASBMkeps" << endl;
 
     ScalarTranspEq *eq;
-    eq = getScalarTransportData("kine");     kine = eq->phi;      kine_bfa = eq->phi_bfa;
-    eq = getScalarTransportData("eps");      eps = eq->phi;       eps_bfa = eq->phi_bfa;
+    eq = getScalarTransportData("kine");
+    kine = eq->phi;
+    kine_bfa = eq->phi_bfa;
+
+    eq = getScalarTransportData("eps");
+    eps = eq->phi;
+    eps_bfa = eq->phi_bfa;
 
     for (int ifa = 0; ifa < nfa; ifa++)
-      nonLinear[ifa] = 1.0;
+    	nonLinear[ifa] = 1.0;
     if (mpi_rank == 0)
-      cout << "NON-LINEAR DOMAIN ACTIVATED." << endl;
+    	cout << "NON-LINEAR DOMAIN ACTIVATED." << endl;
 
     RansTurbASBM::initialHookScalarRansTurbModel();
 
@@ -964,9 +1431,9 @@ public:
     if (name == "eps")
       for (int icv = 0; icv < ncv; icv++)
       {
-        // the reference value is 0.045
+        // the reference value is 0.05
         // another good value is 0.0175
-        double ce1 = CEPS1*(1.0 + 0.045*pow(kine[icv]/v2[icv], 0.5));
+        double ce1 = CEPS1*(1.0 + 0.05*pow(kine[icv]/v2[icv], 0.5));
 
         double src = (ce1*getTurbProd(icv) - CEPS2*rho[icv]*eps[icv])/turbTS[icv];
         rhs[icv]  += src*cv_volume[icv];
@@ -991,8 +1458,8 @@ public:
     // mu_t*str*str - rho*k/k*eps
     for (int icv = 0; icv < ncv; icv++)
     {
-      double kine_src  = getTurbProd(icv)-rho[icv]*eps[icv];
-      double ce1 = CEPS1*(1.0 + 0.045*pow(kine[icv]/v2[icv], 0.5));
+      double kine_src  = getTurbProd(icv) - rho[icv]*eps[icv];
+      double ce1 = CEPS1*(1.0 + 0.05*pow(kine[icv]/v2[icv], 0.5));
       double eps_src = (ce1*getTurbProd(icv) - CEPS2*rho[icv]*eps[icv])/turbTS[icv];
 
       rhs[icv][kine_Index] += kine_src*cv_volume[icv];
@@ -1004,7 +1471,7 @@ public:
 
         dsrcdphi = -eps[icv]/kine[icv];
         A[noc00][kine_Index][kine_Index] -= dsrcdphi*cv_volume[icv];
-        dsrcdphi = -1.;
+        dsrcdphi = -1.0;
         A[noc00][kine_Index][eps_Index]  -= dsrcdphi*cv_volume[icv];
 
         dsrcdphi = -CEPS2/turbTS[icv];
@@ -1041,7 +1508,7 @@ public:
 
       double tau    = kine[icv]/eps[icv];
       double tauKol = 6.0*sqrt(nu/eps[icv]);
-      double tauRel = kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
+      double tauRel = 0.6*kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
 
       switch (LIMIT_TL)
       {
@@ -1060,7 +1527,7 @@ public:
 
       double len    = CL*pow(kine[icv],1.5)/eps[icv];
       double lenKol = CL*CETA*pow(nu,0.75)/pow(eps[icv],0.25);
-      double lenRel = pow(kine[icv],1.5)/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
+      double lenRel = CL*pow(kine[icv],1.5)/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
 
       switch (LIMIT_TL)
       {
@@ -1079,7 +1546,7 @@ public:
     {
     case 0:
       mu_t = min(max(C_MU*rho[icv]*v2[icv]*turbTS[icv], 0.0), 1.0);
-      Pk = mu_t*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv];
+      Pk = mu_t*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
       break;
     case 1:
       Pk = rij_diag[icv][0]*grad_u[icv][0][0]    + rij_offdiag[icv][0]*grad_u[icv][0][1] + rij_offdiag[icv][1]*grad_u[icv][0][2] +
@@ -1249,14 +1716,12 @@ public:
       temp_muT[icv] = min(rho[icv]*kine[icv]/omega_tilde, 100.0);
     }
     
-    //if (step == 50000){
     // compute wall blocking tensor
     if ( step%block_frq == 0 )
       calcBlockTensor();
 
     // compute Reynolds stresses
     calcRsCenterASBM();
-    //}
 
     // eddy-viscosity at cell center
     for (int icv = 0; icv < ncv; icv++)
@@ -1567,4 +2032,514 @@ public:
   }
 
 };
+
+//######################################################//
+//                                                      //
+// ASBM with Menter SST model                         //
+//                                                      //
+//######################################################//
+
+class RansTurbASBMSST : virtual public RansTurbASBM
+{
+public:
+
+  RansTurbASBMSST()
+  {
+    turbModel = ASBMkom;
+
+    sigma_k1  = getDoubleParam("sigma_k1" , "0.85"   );
+    sigma_k2  = getDoubleParam("sigma_k2" , "1.0"    );
+    sigma_om1 = getDoubleParam("sigma_om1", "0.5"    );
+    sigma_om2 = getDoubleParam("sigma_om2", "0.856"  );
+    beta_1    = getDoubleParam("beta_1"   , "0.075"  );
+    beta_2    = getDoubleParam("beta_2"   , "0.0828" );
+    betaStar  = getDoubleParam("betaStar" , "0.09"   );
+    a1        = getDoubleParam("a1"       , "0.31"   );
+    CETA     = getDoubleParam("CETA",     "70.0");
+    CL       = getDoubleParam("CL",       "0.23");
+
+    RIJ_BASED_PK = getIntParam("RIJ_BASED_PK", "0");
+    LIMIT_TL     = getIntParam("LIMIT_TL",     "1");
+
+    sst_form = getStringParam("SST_FORM", "STANDARD");
+
+    if (mpi_rank == 0)
+      cout << "RansTurbSST()" << " ----"<< sst_form << "----"<< endl;
+
+    if (sst_form == "STANDARD")
+    {
+      gamma_1 = beta_1/betaStar - sigma_om1*pow(0.41, 2.0)/sqrt(betaStar);
+      gamma_2 = beta_2/betaStar - sigma_om2*pow(0.41, 2.0)/sqrt(betaStar);
+      boundPk = 20.0;
+      boundPw = 1.0e+12; // no effective limiter
+      boundCrossDiff = 1.0e-20;
+    }
+    else if (sst_form == "2003")
+    {
+      gamma_1 = getDoubleParam("gamma_1"  , "0.55555");
+      gamma_2 = getDoubleParam("gamma_2"  , "0.44"   );
+      boundPk = 10.0;
+      boundPw = 10.0;
+      boundCrossDiff = 1.0e-10;
+    }
+    else
+    {
+      cerr << "ERROR: SST model form specified not implemented." << endl;
+      throw(-1);
+    }
+
+    ScalarTranspEq *eq;
+    eq = registerScalarTransport("kine", CV_DATA);
+    eq->relax = getDoubleParam("RELAX_kine", "0.6");
+    eq->phiZero = getDoubleParam("ZERO_kine", "1.0e-8");
+    eq->phiZeroRel = getDoubleParam("ZERO_REL_kine", "1.0e-2");
+    eq->phiMaxiter = 1000;
+    eq->lowerBound = 1.0e-10;
+    eq->upperBound = 1.0e10;
+    eq->reconstruction = getStringParam("SCALAR_TURB_RECONSTRUCTION", "STANDARD");
+
+    eq = registerScalarTransport("omega", CV_DATA);
+    eq->relax = getDoubleParam("RELAX_omega", "0.4");
+    eq->phiZero = getDoubleParam("ZERO_omega", "1.0e-8");
+    eq->phiZeroRel = getDoubleParam("ZERO_REL_omega", "1.0e-2");
+    eq->phiMaxiter = 1000;
+    eq->lowerBound = 1.0e-4;
+    eq->upperBound = 1.0e15;
+    eq->reconstruction = getStringParam("SCALAR_TURB_RECONSTRUCTION", "STANDARD");
+
+    strMag      = NULL;   registerScalar(strMag     , "strMag"     , CV_DATA);
+    vortMag     = NULL;   registerScalar(vortMag    , "vortMag", CV_DATA);
+    diverg      = NULL;   registerScalar(diverg     , "diverg"     , CV_DATA);
+    muT         = NULL;   registerScalar(muT        , "muT"        , CV_DATA);
+    crossDiff   = NULL;   registerScalar(crossDiff  , "crossDiff"  , CV_DATA);
+    blendFuncF1 = NULL;   registerScalar(blendFuncF1, "blendFuncF1", CV_DATA);
+    blendFuncF2 = NULL;   registerScalar(blendFuncF2, "blendFuncF2", CV_DATA);
+    wallDist    = NULL;   registerScalar(wallDist   , "wallDist"   , CV_DATA);
+    wallConn    = NULL;   // array of integers
+
+    turbTS   = NULL;       registerScalar(turbTS, "turbTS", CV_DATA);
+    turbLS   = NULL;       registerScalar(turbLS, "turbLS", CV_DATA);
+  }
+
+  virtual ~RansTurbASBMSST() {}
+
+public:
+
+  // model variables
+  int *wallConn;           ///< index of closest wall face
+
+  double *omega;           ///< specific dissipation
+  double (*grad_kine)[3];  ///< gradient of tke
+  double (*grad_omega)[3]; ///< gradient of omega
+  double *kine_bfa;        ///< tke at the boundaries
+  double *omega_bfa;       ///< omega at the boundaries
+  double *muT;             ///< turbulent viscosity at cell center
+  double *wallDist;        ///< wall distance
+  double *crossDiff;       ///< cross-diffusion
+  double *blendFuncF1;     ///< first blending function
+  double *blendFuncF2;     ///< second blending function
+  double *limiterFunc;     ///< vort. vs. strain visc. limiter
+
+  string sst_form;         ///< various model forms: standard vs 2003.
+
+  int LIMIT_TL, RIJ_BASED_PK;
+
+  // model constants
+  double sigma_k1, sigma_k2, sigma_om1, sigma_om2;
+  double gamma_1, gamma_2, beta_1, beta_2;
+  double betaStar, a1, boundPk, boundPw, boundCrossDiff;
+  double CL, CETA;
+
+public:
+
+  virtual void initialHookScalarRansTurbModel()
+  {
+    if (mpi_rank == 0)
+      cout << "initialHook() for ASBMSST" << endl;
+
+    wallConn = new int[ncv];
+    calcWallDistance(wallConn, wallDist);
+
+    if      (sst_form == "STANDARD") limiterFunc = vortMag;
+    else if (sst_form == "2003")     limiterFunc = strMag;
+
+    // connect pointers
+    ScalarTranspEq *eq;
+    eq = getScalarTransportData("kine");      kine = eq->phi;    kine_bfa = eq->phi_bfa;   grad_kine = eq->grad_phi;
+    eq = getScalarTransportData("omega");     omega = eq->phi;   omega_bfa = eq->phi_bfa;  grad_omega = eq->grad_phi;
+
+    for (int ifa = 0; ifa < nfa; ifa++)
+      nonLinear[ifa] = 1.0;
+    if (mpi_rank == 0)
+      cout << "NON-LINEAR DOMAIN ACTIVATED." << endl;
+
+    RansTurbASBM::initialHookScalarRansTurbModel();
+
+    // Output to screen
+    if (mpi_rank == 0)
+    {
+      cout << "ASBM properties" << endl;
+      switch(LIMIT_TL)
+      {
+      case 0: cout << "    TL limiter: no" << endl; break;
+      case 1: cout << "    TL limiter: yes" << endl; break;
+      }
+      switch(RIJ_BASED_PK)
+      {
+      case 0: cout << "    PK based on ASBM stresses: no" << endl; break;
+      case 1: cout << "    Pk based on ASBM stresses: yes" << endl; break;
+      }
+      switch(block_rij)
+      {
+      case 0: cout <<"    Blocking rij: no" << endl; break;
+      case 1: cout <<"    Blocking rij: yes" << endl; break;
+      }
+    }
+  }
+
+  virtual void calcRansTurbViscMuet()
+  {
+    // update velocity gradients, cross-diffusion, blending functions
+    calcGradVel();
+    calcStrainRateAndDivergence();
+    calcVorticity();
+    calcMenterBlendingFunctions();
+    calcTurbTimeScale();
+    calcTurbLengthScale();
+
+    // eddy-viscosity at cell center
+    for (int icv=0; icv<ncv; icv++)
+    {
+      double zeta = min(1.0/omega[icv], a1/(limiterFunc[icv]*blendFuncF2[icv]));
+      temp_muT[icv] = min(max(rho[icv]*kine[icv]*zeta, 0.0), 1.0);
+    }
+
+    // compute wall blocking tensor
+    if ( step%block_frq == 0 )
+      calcBlockTensor();
+
+    // compute Reynolds stresses
+    calcRsCenterASBM();
+
+    // eddy-viscosity at cell center
+    for (int icv=0; icv<ncv; icv++)
+    {
+      double zeta = min(1.0/omega[icv], a1/(limiterFunc[icv]*blendFuncF2[icv]));
+      muT[icv] = min(max(rho[icv]*kine[icv]*zeta, 0.0), 1.0);
+    }
+    updateCvData(muT, REPLACE_DATA);
+
+    // internal faces
+    for (int ifa=nfa_b; ifa<nfa; ifa++)
+    {
+      int icv0 = cvofa[ifa][0];
+      int icv1 = cvofa[ifa][1];
+
+      double dx0[3], dx1[3];
+      vecMinVec3d(dx0, x_fa[ifa], x_cv[icv0]);
+      vecMinVec3d(dx1, x_fa[ifa], x_cv[icv1]);
+      double w0 = sqrt(vecDotVec3d(dx0, dx0));
+      double w1 = sqrt(vecDotVec3d(dx1, dx1));
+
+      mut_fa[ifa] = (w1*muT[icv0] + w0*muT[icv1])/(w0+w1);
+    }
+
+    // boundary faces
+    for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
+      if (zone->getKind() == FA_ZONE_BOUNDARY)
+      {
+        if (zoneIsWall(zone->getName()))
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+            mut_fa[ifa] = 0.0;                      // set mut zero at walls
+        else
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            mut_fa[ifa] = muT[icv0];
+          }
+      }
+  }
+
+  virtual void diffusivityHookScalarRansTurb(const string &name)
+  {
+    ScalarTranspEq *eq;
+
+    if (name == "kine")
+    {
+      eq = getScalarTransportData(name);
+
+      // internal faces
+      for (int ifa=nfa_b; ifa<nfa; ifa++)
+      {
+        int icv0 = cvofa[ifa][0];
+        int icv1 = cvofa[ifa][1];
+
+        double dx0[3], dx1[3];
+        vecMinVec3d(dx0, x_fa[ifa], x_cv[icv0]);
+        vecMinVec3d(dx1, x_fa[ifa], x_cv[icv1]);
+        double w0 = sqrt(vecDotVec3d(dx0, dx0));
+        double w1 = sqrt(vecDotVec3d(dx1, dx1));
+
+        double f1_fa = (w1*blendFuncF1[icv0] + w0*blendFuncF1[icv1])/(w0+w1);
+
+        double coeff = sigma_k1*f1_fa + (1. - f1_fa)*sigma_k2;
+        eq->diff[ifa] = mul_fa[ifa] + coeff*mut_fa[ifa];
+      }
+
+      // boundary faces
+      for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
+      if (zone->getKind() == FA_ZONE_BOUNDARY)
+      {
+        if (zoneIsWall(zone->getName()))
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            eq->diff[ifa] = mul_fa[ifa];
+          }
+        else
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            double coeff = sigma_k1*blendFuncF1[icv0] + (1.0 - blendFuncF1[icv0])*sigma_k2;
+            eq->diff[ifa] = mul_fa[ifa] + coeff*mut_fa[ifa];
+          }
+      }
+    }
+
+    if (name == "omega")
+    {
+      eq = getScalarTransportData(name);
+
+      // internal faces
+      for (int ifa=nfa_b; ifa<nfa; ifa++)
+      {
+        int icv0 = cvofa[ifa][0];
+        int icv1 = cvofa[ifa][1];
+
+        double dx0[3], dx1[3];
+        vecMinVec3d(dx0, x_fa[ifa], x_cv[icv0]);
+        vecMinVec3d(dx1, x_fa[ifa], x_cv[icv1]);
+        double w0 = sqrt(vecDotVec3d(dx0, dx0));
+        double w1 = sqrt(vecDotVec3d(dx1, dx1));
+
+        double f1_fa = (w1*blendFuncF1[icv0] + w0*blendFuncF1[icv1])/(w0+w1);
+
+        double coeff = sigma_om1*f1_fa + (1.0 - f1_fa)*sigma_om2;
+        eq->diff[ifa] = mul_fa[ifa] + coeff*mut_fa[ifa];
+      }
+
+      // boundary faces
+      for (list<FaZone>::iterator zone = faZoneList.begin(); zone != faZoneList.end(); zone++)
+      if (zone->getKind() == FA_ZONE_BOUNDARY)
+      {
+        if (zoneIsWall(zone->getName()))
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            eq->diff[ifa] = mul_fa[ifa];
+          }
+        else
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+          {
+            int icv0 = cvofa[ifa][0];
+            double coeff = sigma_om1*blendFuncF1[icv0] + (1. - blendFuncF1[icv0])*sigma_om2;
+            eq->diff[ifa] = mul_fa[ifa] + coeff*mut_fa[ifa];
+          }
+      }
+    }
+  }
+
+  virtual void sourceHookScalarRansTurb_new(double *rhs, double *A, const string &name, int flagImplicit)
+  {
+    if (name == "kine")
+      for (int icv=0; icv<ncv; icv++)
+      {
+        double Pk = getTurbProd(icv);
+
+        double src = Pk - betaStar*rho[icv]*omega[icv]*kine[icv];
+        rhs[icv] += src*cv_volume[icv];
+
+        if (flagImplicit)
+        {
+          int noc00 = nbocv_i[icv];
+          double dsrcdphi = - betaStar*omega[icv];
+          A[noc00] -= dsrcdphi*cv_volume[icv];
+        }
+      }
+
+    if (name == "omega")
+    {
+      for (int icv=0; icv<ncv; icv++)
+      {
+        double F1 = blendFuncF1[icv];
+        double alfa = F1*gamma_1 + (1.0 - F1)*gamma_2;
+        double beta = F1*beta_1 + (1.0 - F1)*beta_2;
+
+        double Pk = getTurbProd(icv);
+        double Pw = Pk/muT[icv];
+
+        double src = alfa*rho[icv]*Pw + (1.0 - F1)*crossDiff[icv] - beta*rho[icv]*omega[icv]*omega[icv];
+        rhs[icv] += src*cv_volume[icv];
+
+        if (flagImplicit)
+        {
+          int noc00 = nbocv_i[icv];
+          double dsrcdphi =  - 2.0*beta*omega[icv];
+          A[noc00] -= dsrcdphi*cv_volume[icv];
+        }
+      }
+    }
+  }
+
+  virtual void sourceHookRansTurbCoupled(double **rhs, double ***A, int nScal, int flagImplicit)
+  {
+    int kine_Index = getScalarTransportIndex("kine");
+    int omega_Index = getScalarTransportIndex("omega");
+
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double F1 = blendFuncF1[icv];
+      double alfa = F1 * gamma_1 + (1.0 - F1) * gamma_2;
+      double beta = F1 * beta_1 + (1.0 - F1) * beta_2;
+
+      double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
+
+      Pk = min(Pk, boundPk*betaStar*rho[icv]*kine[icv]*omega[icv]);
+      Pk = max(Pk, 0.0);
+
+      double src = Pk - betaStar*rho[icv]*omega[icv]*kine[icv];
+      rhs[icv][5+kine_Index] += src*cv_volume[icv];
+
+      double zeta = max(omega[icv], limiterFunc[icv]*blendFuncF2[icv]/a1);
+      double Pw = strMag[icv]*strMag[icv] - 2.0/3.0*zeta*diverg[icv];
+
+      Pw = min(Pw, boundPw*betaStar*omega[icv]*zeta);
+      Pw = max(Pw, 0.0);
+
+      src = alfa*rho[icv]*Pw + (1.0 - F1)*crossDiff[icv] - beta*rho[icv]*omega[icv]*omega[icv];
+      rhs[icv][5+omega_Index] += src*cv_volume[icv];
+
+      if (flagImplicit)
+      {
+        int noc00 = nbocv_i[icv];
+        A[noc00][5+kine_Index][5+kine_Index]   -= - betaStar*omega[icv]*cv_volume[icv];
+        A[noc00][5+omega_Index][5+omega_Index] -= - 2.0*beta*omega[icv]*cv_volume[icv];
+     }
+    }
+  }
+
+  virtual void boundaryHookScalarRansTurb(double *phi_fa, FaZone *zone, const string &name)
+  {
+    if (zone->getKind() == FA_ZONE_BOUNDARY)
+    {
+      Param *param;
+      if (getParam(param, zone->getName()))
+        if ((param->getString() == "WALL") && (name == "omega"))
+        {
+          for (int ifa=zone->ifa_f; ifa<=zone->ifa_l; ifa++)
+          {
+            int icv = cvofa[ifa][0];
+            double muLamCV = calcMuLam(icv);
+            phi_fa[ifa] = 60.0*muLamCV/(rho[icv]*beta_1*wallDist[icv]*wallDist[icv]);
+          }
+        }
+    }
+  }
+
+  virtual void calcMenterBlendingFunctions()
+  {
+    calcCvScalarGrad(grad_kine,  kine,  kine_bfa,  gradreconstruction, limiterNavierS, kine,  epsilonSDWLS);
+    calcCvScalarGrad(grad_omega, omega, omega_bfa, gradreconstruction, limiterNavierS, omega, epsilonSDWLS);
+
+    for (int icv=0; icv<ncv; icv++)
+    {
+      double d = wallDist[icv];
+      double mue = InterpolateAtCellCenterFromFaceValues(mul_fa, icv);
+
+      crossDiff[icv] = max(2.0*rho[icv]*sigma_om2/omega[icv]*vecDotVec3d(grad_kine[icv], grad_omega[icv]), boundCrossDiff);
+
+      double gamma1 = 500.0*mue/(pow(d, 2.0)*rho[icv]*omega[icv]);
+      double gamma2 = 4.0*sigma_om2*rho[icv]*kine[icv]/(d*d*crossDiff[icv]);
+      double gamma3 = sqrt(kine[icv])/(betaStar*omega[icv]*d);
+
+      double gamma = min(max(gamma1, gamma3), gamma2);
+      blendFuncF1[icv] = tanh(pow(gamma,4.0));
+      gamma = max(2.0*gamma3, gamma1);
+      blendFuncF2[icv] = tanh(pow(gamma,2.0));
+    }
+
+    updateCvData(crossDiff, REPLACE_DATA);
+    updateCvData(blendFuncF1, REPLACE_DATA);
+    updateCvData(blendFuncF2, REPLACE_DATA);
+  }
+
+  void calcTurbTimeScale()
+  {
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double nu = calcMuLam(icv)/rho[icv];
+
+      double tau    = 1.0/(betaStar*omega[icv]);
+      double tauKol = 6.0*sqrt(nu/(betaStar*kine[icv]*omega[icv]));
+      double tauRel = sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
+
+      switch (LIMIT_TL)
+      {
+      case 0: turbTS[icv] = tau;                         break;
+      case 1: turbTS[icv] = min(max(tau,tauKol),tauRel); break;
+      }
+    }
+    updateCvData(turbTS,REPLACE_DATA);
+  }
+
+  void calcTurbLengthScale()
+  {
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      double nu = calcMuLam(icv)/rho[icv];
+
+      double len    = CL*pow(kine[icv],0.5)/(betaStar*omega[icv]);
+      double lenKol = CL*CETA*pow(nu,0.75)/pow(betaStar*kine[icv]*omega[icv],0.25);
+      double lenRel = pow(kine[icv],0.5)*sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
+
+      switch (LIMIT_TL)
+      {
+      case 0: turbLS[icv] = len;                         break;
+      case 1: turbLS[icv] = min(max(len,lenKol),lenRel); break;
+      }
+    }
+    updateCvData(turbLS,REPLACE_DATA);
+  }
+
+  double getTurbProd(int icv)
+  {
+    double Pk;
+
+    switch(RIJ_BASED_PK)
+    {
+    case 0:
+      Pk = muT[icv]*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv];
+      break;
+    case 1:
+      Pk = rij_diag[icv][0]*grad_u[icv][0][0]    + rij_offdiag[icv][0]*grad_u[icv][0][1] + rij_offdiag[icv][1]*grad_u[icv][0][2] +
+           rij_offdiag[icv][0]*grad_u[icv][1][0] + rij_diag[icv][1]*grad_u[icv][1][1]    + rij_offdiag[icv][2]*grad_u[icv][1][2] +
+           rij_offdiag[icv][1]*grad_u[icv][2][0] + rij_offdiag[icv][2]*grad_u[icv][2][1] + rij_diag[icv][2]*grad_u[icv][2][2];
+      Pk = min(Pk, 20.0*betaStar*rho[icv]*omega[icv]*kine[icv]);
+      break;
+    }
+
+    Pk = max(Pk, 0.0);
+    return Pk;
+  }
+
+  virtual void finalHookScalarRansTurbModel()
+  {
+    if (wallConn != NULL) {delete [] wallConn; wallConn = NULL;}
+
+    RansTurbASBM::finalHookScalarRansTurbModel();
+  }
+
+};
+
+
 #endif

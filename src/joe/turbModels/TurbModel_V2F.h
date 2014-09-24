@@ -3,6 +3,11 @@
 
 #include "UgpWithCvCompFlow.h"
 
+//######################################################//
+//                                                      //
+// Lien & Kalitzin, Int. J. of Heat & Fluid Flow (2001) //
+//                                                      //
+//######################################################//
 
 class RansTurbV2F : virtual public UgpWithCvCompFlow
 {
@@ -11,7 +16,7 @@ public:
   {
     if (mpi_rank == 0)
       cout << "RansTurbV2F()" << endl;
-    
+
     turbModel = V2F;
 
     C_MU  = getDoubleParam("C_MU",  "0.22");
@@ -23,11 +28,7 @@ public:
     C2    = getDoubleParam("C2",    "0.3");
     CETA  = getDoubleParam("CETA",  "70.0");
     CL    = getDoubleParam("CL",    "0.23");
-    ALPHA = getDoubleParam("ALPHA", "0.6");
     ENN   = getDoubleParam("ENN",   "6.0");
-
-    V2F_LIMIT_PK = getIntParam("V2F_LIMIT_PK", "0");
-
 
     ScalarTranspEq *eq;
     eq = registerScalarTransport("kine",  CV_DATA);
@@ -87,16 +88,14 @@ public:
 
 public:
 
-  double *eps, *v2, *f;                                 ///< turbulent scalars, introduced to have access to variables, results in to more readable code
-  double *kine_bfa, *eps_bfa, *v2_bfa, *f_bfa;          ///< turbulent scalars at the boundary
-  double *muT;                                          ///< turbulent viscosity at cell center for output
+  double *eps, *v2, *f;                        // turb scalars
+  double *kine_bfa, *eps_bfa, *v2_bfa, *f_bfa; // turb scalars at boundary
+  double *muT;                                 // turb visc at cell center
   
-  double C_MU, SIG_K, SIG_D, CEPS1, CEPS2, C1, C2, CETA, CL, ALPHA, ENN;
+  double C_MU, SIG_K, SIG_D, CEPS1, CEPS2, C1, C2, CETA, CL, ENN;
 
 //  double *fsrc1, *fsrc2, *fsrc3, *tturb, *tkol, *trel, *lkol, *lrel, *lturb;
 
-  int V2F_LIMIT_PK;   ///< limiter for tke production: 0 ... no
-                     ///                              1 ... yes
 public:
 
   virtual void initialHookScalarRansTurbModel()
@@ -105,10 +104,22 @@ public:
       cout << "initialHookScalarRansTurbModel()" << endl;
 
     ScalarTranspEq *eq;
-    eq = getScalarTransportData("kine");     kine = eq->phi;      kine_bfa = eq->phi_bfa;
-    eq = getScalarTransportData("eps");      eps = eq->phi;       eps_bfa = eq->phi_bfa;
-    eq = getScalarTransportData("v2");       v2 = eq->phi;        v2_bfa = eq->phi_bfa;
-    eq = getScalarTransportData("f");        f = eq->phi;         f_bfa = eq->phi_bfa;
+
+    eq = getScalarTransportData("kine");
+    kine = eq->phi;
+    kine_bfa = eq->phi_bfa;
+
+    eq = getScalarTransportData("eps");
+    eps = eq->phi;
+    eps_bfa = eq->phi_bfa;
+
+    eq = getScalarTransportData("v2");
+    v2 = eq->phi;
+    v2_bfa = eq->phi_bfa;
+
+    eq = getScalarTransportData("f");
+    f = eq->phi;
+    f_bfa = eq->phi_bfa;
   }
 
   virtual void calcRansTurbViscMuet()
@@ -136,9 +147,10 @@ public:
       double eps_fa  = (w1*eps[icv0]  + w0*eps[icv1])*invwtot;
       double v2_fa   = (w1*v2[icv0]   + w0*v2[icv1])*invwtot;
       double str_fa  = (w1*strMag[icv0] + w0*strMag[icv1])*invwtot;
-      double nuLam_fa = (w1*calcMuLam(icv0)/rho[icv0] + w0*calcMuLam(icv1)/rho[icv1])*invwtot;
+      double nuLam_fa = (w1*calcMuLam(icv0)/rho[icv0] + w0*calcMuLam(icv1)
+                        /rho[icv1])*invwtot;
 
-      double TS  = calcTurbTimeScale(kine_fa, eps_fa, v2_fa, str_fa, nuLam_fa, 1);
+      double TS = calcTurbTimeScale(kine_fa, eps_fa, v2_fa, str_fa, nuLam_fa, 1);
       mut_fa[ifa] = min(max(C_MU*rho_fa*v2_fa*TS, 0.0), 1.0);
     }
 
@@ -146,16 +158,21 @@ public:
     {
       if (zone->getKind() == FA_ZONE_BOUNDARY)
       {
-        if (zoneIsWall(zone->getName()))                             // if wall ensure nu_t = 0.0
+      	// if wall ensure nu_t = 0.0
+        if (zoneIsWall(zone->getName()))
         {
           for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
             mut_fa[ifa] = 0.0;
         }
+        // otherwise make first order extrapolation to face
         else
-          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)     // otherwise make first order extrapolation to face
+          for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
           {
             int icv0 = cvofa[ifa][0];
-            double TS = calcTurbTimeScale(kine[icv0], eps[icv0], v2[icv0], strMag[icv0], calcMuLam(icv0)/rho[icv0], 1);
+            double TS = calcTurbTimeScale(kine[icv0], eps[icv0], v2[icv0],
+            		                          strMag[icv0],
+            		                          calcMuLam(icv0)/rho[icv0], 1);
+
             mut_fa[ifa] = min(max(C_MU*rho[icv0]*v2[icv0]*TS, 0.0), 1.0);
           }
       }
@@ -164,8 +181,13 @@ public:
     for (int icv=0; icv<ncv; icv++)
     {
       muT[icv] = InterpolateAtCellCenterFromFaceValues(mut_fa, icv);
-      turbTS[icv] = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv], calcMuLam(icv)/rho[icv], 1);
-      turbLS[icv] = calcTurbLengthScale(kine[icv], eps[icv], v2[icv], strMag[icv], calcMuLam(icv)/rho[icv], 1);
+
+      turbTS[icv] = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv],
+      		                            calcMuLam(icv)/rho[icv], 1);
+
+      turbLS[icv] = calcTurbLengthScale(kine[icv], eps[icv], v2[icv],
+      		                              strMag[icv], calcMuLam(icv)/rho[icv],
+      		                              1);
 
       /*tturb[icv] = kine[icv]/eps[icv];
       tkol[icv] = 6.0*sqrt(calcMuLam(icv)/rho[icv]/eps[icv]);
@@ -212,12 +234,14 @@ public:
     }
   }
 
-  virtual void sourceHookScalarRansTurb_new(double *rhs, double *A, const string &name, int flagImplicit)
+  virtual void sourceHookScalarRansTurb_new(double *rhs, double *A,
+  		                                      const string &name,
+  		                                      int flagImplicit)
   {
     if (name == "kine")
       for (int icv = 0; icv < ncv; icv++)
       {
-        double src  = getTurbProd(icv, 1) - rho[icv]*eps[icv];
+        double src  = getTurbProd(icv) - rho[icv]*eps[icv];
         rhs[icv] += src*cv_volume[icv];
 
         //d(rho*kine*eps/kine)/d(rho*kine)
@@ -232,10 +256,12 @@ public:
     if (name == "eps")
       for (int icv = 0; icv < ncv; icv++)
       {
-        double TS  = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv], calcMuLam(icv)/rho[icv], 1);
-        double ce1 = CEPS1*(1.0 + 0.045*pow(kine[icv]/v2[icv], 0.5));
+        double TS  = calcTurbTimeScale(kine[icv], eps[icv], v2[icv],
+        		                           strMag[icv], calcMuLam(icv)/rho[icv], 1);
 
-        double src = (ce1*getTurbProd(icv, 1) - CEPS2*rho[icv]*eps[icv])/TS;
+        double ce1 = CEPS1*(1.0 + 0.05*pow(kine[icv]/v2[icv], 0.5));
+
+        double src = (ce1*getTurbProd(icv) - CEPS2*rho[icv]*eps[icv])/TS;
         rhs[icv]  += src*cv_volume[icv];
 
         // d(ce2*rho*eps/TS)/d(rho*eps)
@@ -256,13 +282,21 @@ public:
       {
         // no realizability for TS
         nuLamCV = calcMuLam(icv)/rho[icv];
-        TS = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv],nuLamCV,0);
+        TS = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv],
+        		                   nuLamCV,0);
 
         Pv = f[icv]*kine[icv];
-        Pv_limit = -1.0/TS*((C1 - ENN)*min(v2[icv]/kine[icv],0.666666) - (C1 - 1.0)*(2./3.)) + C2*getTurbProd(icv,1)/(kine[icv]*rho[icv]);
+
+        // limit kf source
+        Pv_limit = -1.0/TS*((C1 - ENN)*min(v2[icv]/kine[icv],0.666666) -
+        		       (C1 - 1.0)*(2.0/3.0)) +
+        		       C2*getTurbProd(icv)/(kine[icv]*rho[icv]);
         Pv_limit *= kine[icv];
 
-        src = rho[icv]*min(Pv, Pv_limit) -ENN*eps[icv]/kine[icv]*rho[icv]*v2[icv];
+        // combine sources
+        src = rho[icv]*min(Pv, Pv_limit) -
+        		  ENN*eps[icv]/kine[icv]*rho[icv]*v2[icv];
+
         rhs[icv]  += src*cv_volume[icv];
 
         // d()/d(rhov2)
@@ -276,37 +310,42 @@ public:
     }
 
     if (name == "f")
-      {
-        for (int icv = 0; icv < ncv; icv++)
-          {
-            double nuLamCV = calcMuLam(icv)/rho[icv];
+    {
+    	for (int icv = 0; icv < ncv; icv++)
+    	{
+    		double nuLamCV = calcMuLam(icv)/rho[icv];
 
-            // no realizability for TS
-            double TS  = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv],nuLamCV,0);
+    		// no realizability for TS
+    		double TS  = calcTurbTimeScale(kine[icv], eps[icv], v2[icv],
+    				                           strMag[icv],nuLamCV,0);
 
-            // no realizability for LS
-            double LS = calcTurbLengthScale(kine[icv], eps[icv], v2[icv], strMag[icv], nuLamCV,0);
-            double LS2 = LS*LS;
+    		// no realizability for LS
+    		double LS = calcTurbLengthScale(kine[icv], eps[icv], v2[icv],
+         		                            strMag[icv], nuLamCV,0);
+    		double LS2 = LS*LS;
 
-            // realizability for TS in production ?!?!
-            double src  = 1.0/TS*((C1-ENN)*min(v2[icv]/kine[icv],0.666666) - (C1 - 1.0)*(2./3.)) - C2*getTurbProd(icv,1)/(kine[icv]*rho[icv]);
-            src += f[icv];
-            src /= -LS2;
+    		// realizability for TS in production ?!?!
+    		double src  = 1.0/TS*((C1-ENN)*min(v2[icv]/kine[icv],0.666666) -
+         		          (C1 - 1.0)*(2.0/3.0)) -
+         		          C2*getTurbProd(icv)/(kine[icv]*rho[icv]);
 
-            rhs[icv] += src*cv_volume[icv];
+    		src += f[icv];
+    		src /= -LS2;
 
-            /*fsrc1[icv] = 1.0/TS*((C1-ENN)*min(v2[icv]/kine[icv],0.666666)-(C1-1.0)*(2./3.)) - C2*getTurbProd(icv, 1)/(kine[icv]*rho[icv]);
-            fsrc2[icv] = 1.0/TS; //-f[icv]/LS2;
-            fsrc3[icv] = v2[icv]/kine[icv]; //-fsrc1[icv]/LS2;*/
+    		rhs[icv] += src*cv_volume[icv];
 
-            if (flagImplicit)
-              {
-              double dsrcdphi = -1.0/LS2*1/rho[icv];
-                int noc00 = nbocv_i[icv];
-                A[noc00] -= dsrcdphi*cv_volume[icv];
-              }
-          }
-      }
+    		/*fsrc1[icv] = 1.0/TS*((C1-ENN)*min(v2[icv]/kine[icv],0.666666)-(C1-1.0)*(2./3.)) - C2*getTurbProd(icv, 1)/(kine[icv]*rho[icv]);
+        fsrc2[icv] = 1.0/TS; //-f[icv]/LS2;
+        fsrc3[icv] = v2[icv]/kine[icv]; //-fsrc1[icv]/LS2;*/
+
+    		if (flagImplicit)
+    		{
+    			double dsrcdphi = -1.0/LS2*1/rho[icv];
+    			int noc00 = nbocv_i[icv];
+    			A[noc00] -= dsrcdphi*cv_volume[icv];
+    		}
+    	}
+    }
   }
 
   virtual void sourceHookRansTurbCoupled(double **rhs, double ***A, int nScal, int flagImplicit)
@@ -322,25 +361,32 @@ public:
     for (int icv = 0; icv < ncv; icv++)
     {
       // kine
-      kine_src = getTurbProd(icv,1) - rho[icv]*eps[icv];
+      kine_src = getTurbProd(icv) - rho[icv]*eps[icv];
 
       // eps
       nuLamCV = calcMuLam(icv)/rho[icv];
-      TS      = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv], nuLamCV, 1);
-      ce1     = CEPS1*(1.0 + 0.045*pow(kine[icv]/v2[icv], 0.5));
-      eps_src = (ce1*getTurbProd(icv, 1) - CEPS2*rho[icv]*eps[icv])/TS;
+      TS      = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv],
+      		                        nuLamCV, 1);
+      ce1     = CEPS1*(1.0 + 0.05*pow(kine[icv]/v2[icv], 0.5));
+      eps_src = (ce1*getTurbProd(icv) - CEPS2*rho[icv]*eps[icv])/TS;
 
       // v2
-      TS       = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv], nuLamCV, 0);
+      TS       = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv],
+      		                         nuLamCV, 0);
       Pv       = f[icv]*kine[icv];
-      Pv_limit = -1.0/TS*((C1 - ENN)*min(v2[icv]/kine[icv],0.666666) - (C1 - 1.0)*(2./3.)) + C2*getTurbProd(icv,1)/(kine[icv]*rho[icv]);
+      Pv_limit = -1.0/TS*((C1 - ENN)*min(v2[icv]/kine[icv],0.666666) -
+      		       (C1 - 1.0)*(2.0/3.0)) +
+      		       C2*getTurbProd(icv)/(kine[icv]*rho[icv]);
       Pv_limit *= kine[icv];
-      v2_src   = rho[icv]*min(Pv, Pv_limit) - ENN*eps[icv]/kine[icv]*rho[icv]*v2[icv];
+      v2_src   = rho[icv]*min(Pv, Pv_limit) -
+      		       ENN*eps[icv]/kine[icv]*rho[icv]*v2[icv];
 
       // f
-      LS    = calcTurbLengthScale(kine[icv], eps[icv], v2[icv], strMag[icv], nuLamCV,0);
+      LS    = calcTurbLengthScale(kine[icv], eps[icv], v2[icv], strMag[icv],
+      		                        nuLamCV,0);
       LS2   = LS*LS;
-      f_src = 1.0/TS*((C1-ENN)*min(v2[icv]/kine[icv],0.666666) - (C1 - 1.0)*(2./3.)) - C2*getTurbProd(icv,1)/(kine[icv]*rho[icv]);
+      f_src = 1.0/TS*((C1-ENN)*min(v2[icv]/kine[icv],0.666666) -
+      		    (C1 - 1.0)*(2./3.)) - C2*getTurbProd(icv)/(kine[icv]*rho[icv]);
       f_src += f[icv];
       f_src /= -LS2;
 
@@ -356,7 +402,7 @@ public:
         // kine
         dsrcdphi = -eps[icv]/kine[icv];
         A[noc00][kine_Index][kine_Index] -= dsrcdphi*cv_volume[icv];
-        dsrcdphi = -1.;
+        dsrcdphi = -1.0;
         A[noc00][kine_Index][eps_Index]  -= dsrcdphi*cv_volume[icv];
 
         // eps
@@ -419,7 +465,8 @@ public:
             vecMinVec3d(s_half, x_fa[ifa], x_cv[icv0]);
             double wallDist = fabs(vecDotVec3d(s_half, nVec));
             double nuLamCV = calcMuLam(icv0)/rho[icv0];
-            double fWall = -(24.0-4.0*ENN)*nuLamCV*nuLamCV*v2[icv0]/(eps[icv0]*pow(wallDist, 4.0));
+            double fWall = -(24.0 - 4.0*ENN)*nuLamCV*nuLamCV*v2[icv0]/
+            		           (eps[icv0]*pow(wallDist, 4.0));
 
             phi_fa[ifa] = fWall;
           }
@@ -432,40 +479,45 @@ public:
     }
   }
 
-  inline double calcTurbTimeScale(const double &kine, const double &eps, const double &v2,
-                                  const double &str, const double &nu, int realizable)
+  inline double calcTurbTimeScale(const double &kine, const double &eps,
+  																const double &v2, const double &str,
+  																const double &nu, int realizable)
   {
     double TimeScale = max(kine/eps, 6.0*sqrt(nu/eps));
 
     if (realizable){
-      double RealScale = kine/(max(sqrt(3.0)*v2*C_MU*str,1.0e-14));
+      double RealScale = 0.6*kine/(max(sqrt(3.0)*v2*C_MU*str,1.0e-14));
       TimeScale = min(TimeScale, RealScale);
     }
 
     return TimeScale;
   }
 
-  inline double calcTurbLengthScale(const double &kine, const double &eps, const double &v2,
-                                    const double &str, const double &nu, int realizable)
+  inline double calcTurbLengthScale(const double &kine, const double &eps,
+  		                              const double &v2, const double &str,
+  		                              const double &nu, int realizable)
   {
-    double LengthScale = CL*max(pow(kine,1.5)/eps, CETA*pow(nu,0.75)/pow(eps,0.25));
+    double LengthScale = pow(kine,1.5)/eps;
 
     if (realizable){
       double RealScale = pow(kine,1.5)/(max(sqrt(3.0)*v2*C_MU*str,1.0e-14));
       LengthScale = min(LengthScale, RealScale);
     }
 
+    LengthScale = CL*max(LengthScale, CETA*pow(nu,0.75)/pow(eps,0.25));
+
     return LengthScale;
   }
 
-  double getTurbProd(int icv, int realizable)
+  double getTurbProd(int icv)
   {
-    double TS = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv], calcMuLam(icv)/rho[icv], realizable);
+    double TS = calcTurbTimeScale(kine[icv], eps[icv], v2[icv], strMag[icv],
+    		                          calcMuLam(icv)/rho[icv], 1);
     double mu_t = min(max(C_MU*rho[icv]*v2[icv]*TS, 0.0), 1.0);
 
-    double Pk = mu_t*strMag[icv]*strMag[icv] - 2./3.*rho[icv]*kine[icv]*diverg[icv];
-    if (V2F_LIMIT_PK == 1)
-      Pk = min(Pk, 20.0*rho[icv]*eps[icv]);
+    double Pk = mu_t*strMag[icv]*strMag[icv] -
+    		        2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
+
     return Pk;
   }
 

@@ -36,7 +36,7 @@
  
 
     ! Constants
-    real(dp), parameter                     :: a0 = 2.5_dp
+    real(dp), parameter                     :: a0 = 10.0_dp !2.5_dp
     real(dp), parameter                     :: pi = 3.14159265359_dp
 
     real(dp), parameter                     :: zero = 0.0_dp
