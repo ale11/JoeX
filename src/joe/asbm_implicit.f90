@@ -19,7 +19,7 @@
     integer, parameter  :: dp = selected_real_kind(15, 307) !double precision
 
     ! INITIAL DECLARATIONS
-    ! routine's inputs and outputs
+    ! Routine's inputs and outputs
     real(dp), dimension(3,3), intent(in)    :: st  !(Rate of strain)*timescale
     real(dp), dimension(3,3), intent(in)    :: wt  !(Mean rotation)*timescale
     real(dp), dimension(3,3), intent(in)    :: wft !(Frame rotation)*timescale
@@ -35,18 +35,18 @@
     integer, intent(in)                     :: bltype  !wall blocking type 
     integer, intent(inout)                  :: ierr    !error flag
 
-    ! constants
+    ! Constants
     real(dp), parameter                     :: a0 = 1.4_dp
     real(dp), parameter                     :: a01 = (2.1_dp - a0) / 2.0_dp
 
     real(dp), parameter                     :: zero = 0.0_dp
-    real(dp), parameter                     :: small = 1.0e-03_dp
     real(dp), parameter                     :: fifth = 0.2_dp
     real(dp), parameter                     :: fourth = 0.25_dp
     real(dp), parameter                     :: third = 1.0_dp / 3.0_dp
     real(dp), parameter                     :: half = 0.5_dp
     real(dp), parameter                     :: twoth = 2.0_dp*third
     real(dp), parameter                     :: one = 1.0_dp
+    real(dp), parameter                     :: two = 2.0_dp
     real(dp), parameter, dimension(3,3)     :: delta =                         &
          reshape((/1., 0., 0., 0., 1., 0., 0., 0., 1./),(/3,3/))
     real(dp), parameter, dimension(3,3,3)   :: eps =                           &
@@ -56,7 +56,7 @@
     real(dp), parameter                     :: a_error = 1.0e-10_dp
     real(dp), parameter                     :: r_small = 1.0e-14_dp
     
-    ! variables
+    ! Variables
     integer                  :: i,j,k,l,m,n   !do loop indices
     integer                  :: ktr           !iteration index for N-R
     integer                  :: id, idx       !indeces for N-R vector & matrix
@@ -147,10 +147,7 @@
 
     ! INITIALIZE AND CALCULATE TENSOR PRODUCTS
     ierr = 0
-    
-    trace_stst = zero
-    trace_wtwt = zero
-    
+
     ! initialize default value for A
     a(1,1) = third
     a(2,1) = zero
@@ -167,8 +164,11 @@
     ! tensor products
     stst = zero
     wtwt = zero
-    wtst = zero    
-  
+    wtst = zero
+
+    trace_stst = zero
+    trace_wtwt = zero
+
     do i = 1,3
       do j = 1,3
         do k = 1,3
@@ -212,20 +212,20 @@
 
       NewtonRhapson_as: do while (.not.converged)
         ktr = ktr + 1
-        ! perturbations
-        if (mod(ktr,20) == 0) then
-          do i = 1,3
-            do j = 1,3
-              if (mod(ktr,40) == 0) then
-                a(i,j) = 0.5_dp*a(i,j)
-              else if (mod(ktr,200) == 0) then
-                a(i,j) = a(i,j) + as(i,j)
-              else
-                a(i,j) = 2.0_dp*a(i,j)
-              end if
-            end do
-          end do
-        end if
+        ! perturbations !ale
+        !if (mod(ktr,20) == 0) then
+        !  do i = 1,3
+        !    do j = 1,3
+        !      if (mod(ktr,40) == 0) then
+        !        a(i,j) = 0.5_dp*a(i,j)
+        !      else if (mod(ktr,200) == 0) then
+        !        a(i,j) = a(i,j) + as(i,j)
+        !      else
+        !        a(i,j) = 2.0_dp*a(i,j)
+        !      end if
+        !    end do
+        !  end do
+        !end if
 
         ! invariants
         trace_sta = zero
@@ -245,7 +245,7 @@
           ! false value to deal with numerical problems
           mag_ststa = sqrt(trace_stst)
         end if
-        den_as = a0 + 2.0_dp*mag_ststa
+        den_as = a0 + two*mag_ststa
        
         ! compute matrix and rhs for as perturbation
         do i = 1,3
@@ -347,20 +347,20 @@
 
       NewtonRhapson_ar: do while (.not.converged)
         ktr = ktr + 1
-        ! perturbations
-        if (mod(ktr,20) == 0) then
-          do i = 1,3
-            do j = 1,3
-              if (mod(ktr,40) == 0) then
-                a(i,j) = 0.5_dp*a(i,j)
-              else if (mod(ktr,200) == 0) then
-                a(i,j) = a(i,j) + ar(i,j)
-              else
-                a(i,j) = 2.0_dp*a(i,j)
-              end if
-            end do
-          end do
-        end if
+        ! perturbations !ale
+        !if (mod(ktr,20) == 0) then
+        !  do i = 1,3
+        !    do j = 1,3
+        !      if (mod(ktr,40) == 0) then
+        !        a(i,j) = 0.5_dp*a(i,j)
+        !      else if (mod(ktr,200) == 0) then
+        !        a(i,j) = a(i,j) + ar(i,j)
+        !      else
+        !        a(i,j) = 2.0_dp*a(i,j)
+        !      end if
+        !    end do
+        !  end do
+        !end if
 
         ! compute rotation parameters
         trace_wtsta = zero
@@ -395,10 +395,10 @@
         if (alpha2 < zero) alpha2 = zero
         alpha = sqrt(alpha2)
         
-        term = 4.0_dp - 2.0_dp*alpha2
+        term = 4.0_dp - two*alpha2
         if (term < zero) term = zero
         broot = sqrt(term)
-        beta = 2.0_dp - broot
+        beta = two - broot
 
         c2 = alpha/norm_wt
         c3 = beta/trace_wtwt
@@ -616,18 +616,19 @@
       ierr = 6
     end if
 
-    ! relative rotation rate and frame rotation rate vector
-    vec_wtt(1) = wtt(2,3)
-    vec_wtt(2) = wtt(3,1)
-    vec_wtt(3) = wtt(1,2)
+    ! 1/2 vorticity vector + angular velocity vector
+    vec_wtt(1) = wtt(3,2)
+    vec_wtt(2) = wtt(1,3)
+    vec_wtt(3) = wtt(2,1)
 
+    ! relative rate-of-rotation vector
     vec_wdt(1) = wft(3,2) - wt(3,2)
     vec_wdt(2) = wft(1,3) - wt(1,3)
     vec_wdt(3) = wft(2,1) - wt(2,1)
     
     ! their magninuteds
-    dot_vec_wtt = vec_wtt(1)**2.0_dp + vec_wtt(2)**2.0_dp + vec_wtt(3)**2.0_dp
-    dot_vec_wdt = vec_wdt(1)**2.0_dp + vec_wdt(2)**2.0_dp + vec_wdt(3)**2.0_dp
+    dot_vec_wtt = vec_wtt(1)**two + vec_wtt(2)**two + vec_wtt(3)**two
+    dot_vec_wdt = vec_wdt(1)**two + vec_wdt(2)**two + vec_wdt(3)**two
 
     ! check for total rotation
     if (dot_vec_wtt > zero) then
@@ -656,7 +657,7 @@
     end do
 
     ! compute structure parameters
-    eta_c1 = hat_wt/(hat_st + small)
+    eta_c1 = hat_wt/(hat_st + 1.0e-06_dp)
     eta_c2 = hat_wtt/hat_st
     
     if ((eta_c1 < zero) .or. (eta_c1 /= eta_c1)) eta_c1 = zero
@@ -683,13 +684,12 @@
       oma = one - trace_aa
       sqamth = sqrt(trace_aa - third)
 
-      if (eta_r < one) then
+      if (eta_r <= one) then
         call int_er_lt_one(eta_r,eta_f,oma,sqamth,phis,bets,chis,phi1,bet1,chi1)
       else 
         call int_er_gt_one(eta_r,eta_f,oma,sqamth,phis,bets,chis,phi1,bet1,chi1)
       end if
-      struc_weight = exp(-100.0_dp*abs(eta_r - one)**2.0_dp)
-      !phis = phis*(one - struc_weight) + phi1*(struc_weight)
+      struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)
       bets = bets*(one - struc_weight) + bet1*(struc_weight)
       chis = chis*(one - struc_weight) + chi1*(struc_weight)
     end if
@@ -700,19 +700,17 @@
 
     phi = phis*xp_aa
     chi = chis*xp_aa
-    if (eta_r < one) then
+    if (eta_r <= one) then
       bet = bets
     else
       bet = one - max(one - 0.9_dp*(eta_r - one)**0.31_dp, zero)*              &
                   (1.5_dp*(trace_aa - third))**10.0_dp
-      !a(1,2) = a(1,2)*(one - 1.5_dp*(trace_aa - third))**0.1_dp
-      !a(2,1) = a(1,2)
     end if
-    struc_weight = exp(-100.0_dp*abs(eta_r - one)**2.0_dp)
-    bet = bet*(one - struc_weight) + bet1*(struc_weight)
+    struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)  !ale
+    bet = bet*(one - struc_weight) + bet1*(struc_weight) !ale
 
     ! compute helical scalar
-    scl_g = 2.0_dp*phi*(one - phi)/(one + chi)
+    scl_g = two*phi*(one - phi)/(one + chi)
     if (scl_g < zero) scl_g = zero
     scl_g = bet*sqrt(scl_g)
 
@@ -724,7 +722,7 @@
       ! blockage correction to phi and gamma
       trace_bl = bl(1,1) + bl(2,2) + bl(3,3)
 
-      phi = one - (one - trace_bl)**2.0_dp + phi*(one - trace_bl)**2.0_dp
+      phi = one - (one - trace_bl)**two + phi*(one - trace_bl)**two
       scl_g = (one - trace_bl)*scl_g
       !chi = (one - trace_bl)*chi
     endif
@@ -732,7 +730,7 @@
     if (rotation_t) then
     ! compute helical vector
       do k = 1,3
-        vec_g(k) = -scl_g*vec_wtt(k)/mag_vec_wtt
+        vec_g(k) = scl_g*vec_wtt(k)/mag_vec_wtt
       end do
     else
       do k = 1,3
@@ -767,6 +765,7 @@
     cir(3,1) = vec_g(1)
     cir(3,2) = vec_g(2)
     cir(3,3) = vec_g(3)
+
   end subroutine asbm
 
 !=============================== INT_ER_LT_ONE ===============================80
@@ -913,13 +912,13 @@
 
     if (eta_f < zero) then
       phi1 = (eta_f - one)/(3.0_dp*eta_f - one)
-      bet1 = one/(one - eta_f*(1 + sqamth)/oma)
+      bet1 = one/(one - eta_f*(one + sqamth)/oma)
       chi1 = fifth*bet1
     else if (eta_f < one) then
       phi1 = one - eta_f
       chi1 = zero
       !chi1 = fifth + (one - fifth)*                                           &
-      !       (one - (one - eta_f)**2/(one + 3.0_dp*eta_f/oma))
+      !       (one - (one - eta_f)**2.0_dp/(one + 3.0_dp*eta_f/oma))
       bet1 = one
     else
       phi1 = (eta_f - one)/(3.0_dp*eta_f - one)
@@ -968,8 +967,9 @@
       phi0 = (one - bet0)/three
       chi0 = -bet0
     else
-      phi0 = 0.145_dp*(var2/0.75_dp - (var2/0.75_dp)**9)
-      chi0 = -(0.342_dp*(var2/0.75_dp) + (one - 0.342_dp)*(var2/0.75_dp)**6)
+      phi0 = 0.145_dp*(var2/0.75_dp - (var2/0.75_dp)**9.0_dp)
+      chi0 = -(0.342_dp*(var2/0.75_dp) +                                       &
+             (one - 0.342_dp)*(var2/0.75_dp)**6.0_dp)
       bet0 = one
     end if
     chi0 = zero

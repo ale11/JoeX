@@ -4374,8 +4374,8 @@ void UgpWithCvCompFlow::interpolateReStressToFace()
             }
             else
             {
-              cout << "Warning, symmetry face not orthogonal to a coordinate axis,";
-              cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
+              //cout << "Warning, symmetry face not orthogonal to a coordinate axis,";
+              //cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
             }
 
             /*

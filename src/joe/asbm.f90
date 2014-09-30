@@ -3,13 +3,10 @@
 ! Computes the Reynolds stresses using the Algebraic Structure-based Model. 
 ! On return:
 !   ierr = 0 ok
-!   ierr = 1 error for AS implicit eq. too large
-!   ierr = 3 linear solver for AR failed
-!   ierr = 4 AR could not be solved in ktr iterations
-!   ierr = 5 negative r_ratio
-!   ierr = 6 trace_aa not within bounds
-!   ierr = 7 trace of blocking vector out of bounds
-!   ierr = 8 flattening parameter is NAN
+!   ierr = 1 norm of error for AS implicit eq. too large
+!   ierr = 2 trace_aa not within bounds
+!   ierr = 3 trace of blocking vector out of bounds
+!   ierr = 4 flattening parameter is NAN
 !
 !=============================================================================80
 
@@ -33,10 +30,9 @@
     integer, intent(in)                     :: ktrmax  !max iters for N-R
     integer, intent(in)                     :: bltype  !wall blocking type 
     integer, intent(inout)                  :: ierr    !error flag
- 
 
     ! Constants
-    real(dp), parameter                     :: a0 = 10.0_dp !2.5_dp
+    real(dp), parameter                     :: a0 = 2.5_dp
     real(dp), parameter                     :: pi = 3.14159265359_dp
 
     real(dp), parameter                     :: zero = 0.0_dp
@@ -59,8 +55,8 @@
     ! Variables
     integer                  :: i,j,k,l,m,n   !do loop indices
     integer                  :: ktr           !iteration index for N-R
-    integer                  :: id, idx       !indeces for N-R vector & matrix   
-    integer, dimension(3,3)  :: index =                                        & 
+    integer                  :: id, idx       !indeces for N-R vector & matrix
+    integer, dimension(3,3)  :: index =                                        &
       reshape((/1, 2, 3, 2, 4, 5, 3, 5, 6/),(/3, 3/))
 
     logical                  :: strain        !true for strained flows
@@ -69,7 +65,6 @@
     logical                  :: converged     !used for N-R solver
     
     real(dp), dimension(3,3) :: a             !eddy axis tensor
-    real(dp), dimension(3,3) :: ar_old        !input value for ar
     real(dp), dimension(3,3) :: wtt           !frame + mean rotation
     real(dp), dimension(3,3) :: stst          !st_ik*st_kj
     real(dp), dimension(3,3) :: wtwt          !wt_ik*wt_kj
@@ -153,7 +148,7 @@
 
     ! INITIALIZE AND CALCULATE TENSOR PRODUCTS
     ierr = 0
-    
+
     ! initialize default value for A
     a(1,1) = third
     a(2,1) = zero
@@ -173,8 +168,8 @@
     wtst = zero
 
     trace_stst = zero
-    trace_wtwt = zero   
-  
+    trace_wtwt = zero
+
     do i = 1,3
       do j = 1,3
         do k = 1,3
@@ -225,7 +220,7 @@
       nc = 12.0_dp*i2
       nd = -(4.0_dp*a0*i2 + 24.0_dp*i3)
 
-      ndelta = 18.0_dp*na*nb*nc*nd - 4.0_dp*nb**3.0_dp*nd + nb**two*nc**two     &
+      ndelta = 18.0_dp*na*nb*nc*nd - 4.0_dp*nb**3.0_dp*nd + nb**two*nc**two    &
                - 4.0_dp*na*nc**3.0_dp - 27.0_dp*na**two*nd**two
       ndelta0 = nb**two - 3.0_dp*na*nc
       ndelta1 = two*nb**3.0_dp - 9.0_dp*na*nb*nc + 27.0_dp*na**two*nd
@@ -237,7 +232,7 @@
       if (ndelta <= zero) then
         nbig = nbig + (p1 + p2)**(third) + ndelta0*(p1 + p2)**(-third)
       else
-        nbig = nbig + two*(p1*p1 + p2*p2)**(1.0_dp/6.0_dp)*                     &
+        nbig = nbig + two*(p1*p1 + p2*p2)**(1.0_dp/6.0_dp)*                    &
                cos(third*acos(p1/sqrt(p1*p1 + p2*p2)) + twoth*pi)
       end if
       nbig = -third*nbig/na
@@ -265,14 +260,14 @@
 
       do i = 1,3
         do j = 1,3
-          error(i,j) = a(i,j)*nbig -                                            &
-                       (sta(i,j) + sta(j,i) - twoth*trace_sta*delta(i,j)) -     &
+          error(i,j) = a(i,j)*nbig -                                           &
+                       (sta(i,j) + sta(j,i) - twoth*trace_sta*delta(i,j)) -    &
                        twoth*st(i,j)
         end do
       end do
 
-      norm_error = error(1,1)**2 + error(1,2)**2 + error(1,3)**2 +              &
-                   error(2,1)**2 + error(2,2)**2 + error(2,3)**2 +              &
+      norm_error = error(1,1)**2 + error(1,2)**2 + error(1,3)**2 +             &
+                   error(2,1)**2 + error(2,2)**2 + error(2,3)**2 +             &
                    error(3,1)**2 + error(3,2)**2 + error(3,3)**2
       if (norm_error > small) then
         ierr = 1
@@ -367,38 +362,16 @@
     if (trace_aa > one) then
       write(*,*) 'trace_aa = ', trace_aa, ' greater than one'
       trace_aa = one
-      !a(1,1) = one/sqrt(3.0_dp)
-      !a(2,1) = zero
-      !a(3,1) = zero
-
-      !a(1,2) = zero
-      !a(2,2) = one/sqrt(3.0_dp)
-      !a(3,2) = zero
-    
-      !a(1,3) = zero
-      !a(2,3) = zero
-      !a(3,3) = one/sqrt(3.0_dp)
-      ierr = 6
+      ierr = 2
     end if
     
     if (trace_aa < third) then
       write(*,*) 'trace_aa = ', trace_aa, ' less than third'
       trace_aa = third
-      !a(1,1) = third
-      !a(2,1) = zero
-      !a(3,1) = zero
-
-      !a(1,2) = zero
-      !a(2,2) = third
-      !a(3,2) = zero
-    
-      !a(1,3) = zero
-      !a(2,3) = zero
-      !a(3,3) = third
-      ierr = 6
+      ierr = 2
     end if
 
-    ! mean + frame rate-of-rotation vector (half of vorticity vector)
+    ! 1/2 vorticity vector + angular velocity vector
     vec_wtt(1) = wtt(3,2)
     vec_wtt(2) = wtt(1,3)
     vec_wtt(3) = wtt(2,1)
@@ -439,15 +412,15 @@
     end do
 
     ! compute structure parameters
-    eta_c1 = hat_wt/(hat_st + small)
+    eta_c1 = hat_wt/(hat_st + 1.0e-06_dp)
     eta_c2 = hat_wtt/hat_st
     
     if ((eta_c1 < zero) .or. (eta_c1 /= eta_c1)) eta_c1 = zero
     if ((eta_c2 < zero) .or. (eta_c2 /= eta_c2)) eta_c2 = zero
 
     eta_r = sqrt(eta_c1)
-    eta_f = zero 
-    
+    eta_f = zero
+
     ! compute phis, chis, bets
     if (hat_st < zero) then
       ! without strain
@@ -466,13 +439,12 @@
       oma = one - trace_aa
       sqamth = sqrt(trace_aa - third)
 
-      if (eta_r < one) then
+      if (eta_r <= one) then
         call int_er_lt_one(eta_r,eta_f,oma,sqamth,phis,bets,chis,phi1,bet1,chi1)
       else 
         call int_er_gt_one(eta_r,eta_f,oma,sqamth,phis,bets,chis,phi1,bet1,chi1)
       end if
       struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)
-      !phis = phis*(one - struc_weight) + phi1*(struc_weight)
       bets = bets*(one - struc_weight) + bet1*(struc_weight)
       chis = chis*(one - struc_weight) + chi1*(struc_weight)
     end if
@@ -483,16 +455,14 @@
 
     phi = phis*xp_aa
     chi = chis*xp_aa
-    if (eta_r < one) then
+    if (eta_r <= one) then
       bet = bets
     else
       bet = one - max(one - 0.9_dp*(eta_r - one)**0.31_dp, zero)*              &
                   (1.5_dp*(trace_aa - third))**10.0_dp
-      !a(1,2) = a(1,2)*(one - 1.5_dp*(trace_aa - third))**0.1_dp
-      !a(2,1) = a(1,2)
     end if
-    struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)
-    bet = bet*(one - struc_weight) + bet1*(struc_weight)
+    struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)  !ale
+    bet = bet*(one - struc_weight) + bet1*(struc_weight) !ale
 
     ! compute helical scalar
     scl_g = two*phi*(one - phi)/(one + chi)
@@ -530,7 +500,7 @@
                    dot_vec_wdt, rotation_t, delta, eps, ierr)
 
     ! Output some useful data
-    dmn = rey 
+    dmn = rey
 
     if (bltype == 1) then
       ! blockage correction to Reynolds stress tensor
@@ -543,8 +513,8 @@
     cir(1,2) = bet
     cir(1,3) = chi
 
-    cir(2,1) = r_ratio
-    cir(2,2) = eta_r
+    cir(2,1) = eta_r
+    cir(2,2) = eta_f
     cir(2,3) = trace_aa
     
     cir(3,1) = vec_g(1)
@@ -697,13 +667,13 @@
 
     if (eta_f < zero) then
       phi1 = (eta_f - one)/(3.0_dp*eta_f - one)
-      bet1 = one/(one - eta_f*(1 + sqamth)/oma)
+      bet1 = one/(one - eta_f*(one + sqamth)/oma)
       chi1 = fifth*bet1
     else if (eta_f < one) then
       phi1 = one - eta_f
       chi1 = zero
-      !chi1 = fifth + (one - fifth)*                                            &
-      !       (one - (one - eta_f)**2/(one + 3.0_dp*eta_f/oma))
+      !chi1 = fifth + (one - fifth)*                                           &
+      !       (one - (one - eta_f)**2.0_dp/(one + 3.0_dp*eta_f/oma))
       bet1 = one
     else
       phi1 = (eta_f - one)/(3.0_dp*eta_f - one)
@@ -752,8 +722,9 @@
       phi0 = (one - bet0)/three
       chi0 = -bet0
     else
-      phi0 = 0.145_dp*(var2/0.75_dp - (var2/0.75_dp)**9)
-      chi0 = -(0.342_dp*(var2/0.75_dp) + (one - 0.342_dp)*(var2/0.75_dp)**6)
+      phi0 = 0.145_dp*(var2/0.75_dp - (var2/0.75_dp)**9.0_dp)
+      chi0 = -(0.342_dp*(var2/0.75_dp) +                                       &
+             (one - 0.342_dp)*(var2/0.75_dp)**6.0_dp)
       bet0 = one
     end if
     chi0 = zero
@@ -806,8 +777,8 @@
 
     ! check for bad data
     if (trace_bl > one) then
-      ierr = 7
-      return 
+      ierr = 3
+      return
     end if
 
     ah = a
@@ -924,7 +895,7 @@
 
     ! compute flattened tensors
     if (chi /= chi ) then
-      ierr = 8
+      ierr = 4
       return
     end if
 
@@ -999,9 +970,9 @@
         cir(j,i) = cir(i,j)
       end do
     end do
-    
+
   end subroutine structure
-        
+
 !================================= LINSOLVER =================================80
 !
 ! Double precision linear algebraic equation solver.
@@ -1030,7 +1001,7 @@
     integer, intent(inout)                        :: ierr   !error flag
     real(dp), dimension(ndim,ndim), intent(inout) :: a      !matrix
     real(dp), dimension(ndim), intent(inout)      :: b      !vector
-    
+
     ! constants
     real(dp), parameter :: zero = 0.0_dp
     real(dp), parameter :: one = 1.0_dp

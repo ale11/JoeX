@@ -3745,7 +3745,6 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
         // .............................................................................................
         if ((param->getString() == "SYMMETRY") || (param->getString() == "NOTHING"))
         {
-          double tauTurbij_nj[3];
           for (int ifa = zone->ifa_f; ifa <= zone->ifa_l; ifa++)
           {
             int icv0 = cvofa[ifa][0];
@@ -3789,7 +3788,7 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             grad_u_sym[2][2] = grad_u[icv0][2][2];
 
             double lbound = 0.999999;
-
+            bool aligned = true;
             if (fabs(nVec[0]) > lbound)
             {
               grad_u_sym[0][1] = 0.0;
@@ -3813,34 +3812,48 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             }
             else
             {
-              cout << "Warning, symmetry face not orthogonal to a coordinate axis, ";
-              cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
+            	aligned = false;
+              //cout << "Warning, symmetry face not orthogonal to a coordinate axis, ";
+              //cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
             }
 
-            addViscFlux(Frhou, FrhoE, A0, NULL,
+            if (aligned)
+            {
+            	addViscFlux(Frhou, FrhoE, A0, NULL,
                       rho[icv0],    vel[icv0],    grad_u_sym, enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  kine0,
                       rho_bfa[ifa], vel_bfa[ifa], grad_u_sym, h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], kine1,
                       nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, vel_bfa[ifa],
                       area, nVec, smag, nVec, test1, test2, test3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction*/
-            /*
-            // should contribution to fluxes be included?
-            if (flagImplicit)
-            {
+            	/*
+            	// should contribution to fluxes be included?
+            	if (flagImplicit)
+            	{
               int noc00 = nbocv_i[icv0]; // icv0's diagonal
 
               for (int i=1; i<5; i++)
                 for (int j=0; j<5; j++)
                   A[noc00][i][j] -= A0[i][j];
-            }*/
+            	}*/
 
-            rhs_rhou[icv0][0] -= Frhou[0];
-            rhs_rhou[icv0][1] -= Frhou[1];
-            rhs_rhou[icv0][2] -= Frhou[2];
-            // viscous flux = 0 for energy equation
+            	rhs_rhou[icv0][0] -= Frhou[0];
+            	rhs_rhou[icv0][1] -= Frhou[1];
+            	rhs_rhou[icv0][2] -= Frhou[2];
+            	// viscous flux = 0 for energy equation
 
-            viscFlux[icv0][0] -= test1;
-            viscFlux[icv0][1] -= test2;
-            viscFlux[icv0][2] -= test3;
+            	viscFlux[icv0][0] -= test1;
+            	viscFlux[icv0][1] -= test2;
+            	viscFlux[icv0][2] -= test3;
+            }
+            else
+            {
+              double temp;
+              if (turbModel > NONE)
+                temp = -2.0/3.0 * rho_bfa[ifa] * kine_fa;
+
+              rhs_rhou[icv0][0] += area*temp*nVec[0];
+              rhs_rhou[icv0][1] += area*temp*nVec[1];
+              rhs_rhou[icv0][2] += area*temp*nVec[2];
+            }
           }
 
         }
@@ -5453,7 +5466,7 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               grad_u_sym[2][2] = grad_u[icv0][2][2];
 
               double lbound = 0.999999;
-
+              bool aligned = true;
               if (fabs(nVec[0]) > lbound)
               {
                 grad_u_sym[0][1] = 0.0;
@@ -5477,32 +5490,45 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               }
               else
               {
-                cout << "Warning, symmetry face not orthogonal to a coordinate axis, ";
-                cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
+              	aligned = false;
+                //cout << "Warning, symmetry face not orthogonal to a coordinate axis, ";
+                //cout << "nVec = {" << nVec[0] << ", " << nVec[1] << ", " << nVec[2] << "}" << endl;
               }
 
-              double temp1 = 0.0;
-              double temp2 = 0.0;
-              double temp3 = 0.0;
-              calcViscousFluxCoupled(ViscousFlux, A0, A1,
+              if (aligned)
+              {
+              	double temp1 = 0.0, temp2 = 0.0, temp3 = 0.0;
+              	calcViscousFluxCoupled(ViscousFlux, A0, A1,
                          rho[icv0],    vel[icv0],    grad_u_sym, enthalpy[icv0], grad_enthalpy[icv0], temp[icv0], RoM[icv0],    gamma[icv0],  Scalar0, gradScal0, dpress_dscal0, kine0,
                          rho_bfa[ifa], vel_bfa[ifa], grad_u_sym, h_bfa[ifa],     grad_enthalpy[icv0], T_bfa[ifa], RoM_bfa[ifa], gam_bfa[ifa], Scalar0, gradScal0, dpress_dscal0, kine1,
                          nonLinear[ifa], rij_diag_fa[ifa], rij_offdiag_fa[ifa], mul_fa[ifa], mut_fa[ifa], lamOcp_fa[ifa], kine_fa, vel_bfa[ifa], diffScal, DiffTerm,
                          area, nVec, smag, nVec, alpha, nScal, temp1, temp2, temp3);  /* <- use nVec here instead of sVec, to avoid inaccurate correction */
 
-              rhs[icv0][1] -= ViscousFlux[1];
-              rhs[icv0][2] -= ViscousFlux[2];
-              rhs[icv0][3] -= ViscousFlux[3];
-              // viscous flux = 0 for energy equation and turb scalars
+              	rhs[icv0][1] -= ViscousFlux[1];
+              	rhs[icv0][2] -= ViscousFlux[2];
+              	rhs[icv0][3] -= ViscousFlux[3];
+              	// viscous flux = 0 for energy equation and turb scalars
 
-              viscFlux[icv0][0] -= temp1;
-              viscFlux[icv0][1] -= temp2;
-              viscFlux[icv0][2] -= temp3;
+              	viscFlux[icv0][0] -= temp1;
+              	viscFlux[icv0][1] -= temp2;
+              	viscFlux[icv0][2] -= temp3;
 
-              if (flagImplicit)
-              {
-                // No implicit term considered here!
+              	if (flagImplicit)
+              	{
+              		// No implicit term considered here!
+              	}
               }
+              else
+              {
+                double temp;
+                if (turbModel > NONE)
+                  temp = -2.0/3.0 * rho_bfa[ifa] * kine_fa;
+
+                rhs[icv0][1] += area*temp*nVec[0];
+                rhs[icv0][2] += area*temp*nVec[1];
+                rhs[icv0][3] += area*temp*nVec[2];
+              }
+
             }
           }
         }
