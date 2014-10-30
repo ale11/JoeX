@@ -40,10 +40,10 @@ public: // constructor, destructor
     temp_muT      = NULL;     registerScalar(temp_muT,       "temp_muT",       CV_DATA);
     debug1        = NULL;     registerVector(debug1,         "debug1",         CV_DATA);
     debug2        = NULL;     registerVector(debug2,         "debug2",         CV_DATA);
+    debug3        = NULL;     registerVector(debug3,         "debug3",         CV_DATA);
+    debug4        = NULL;     registerVector(debug4,         "debug4",         CV_DATA);
     rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",  CV_DATA);
     rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
-    dij_diag      = NULL;     registerVector(dij_diag,       "dij_diag",     CV_DATA);
-    dij_offdiag   = NULL;     registerVector(dij_offdiag,    "dij_offdiag",  CV_DATA);
     // -------------------------------------------------------------------------------
   }
 
@@ -86,10 +86,10 @@ protected: // member variables
   double *temp_muT;
   double (*debug1)[3];
   double (*debug2)[3];
+  double (*debug3)[3];
+  double (*debug4)[3];
   double (*rij_diag_nd)[3];
   double (*rij_offdiag_nd)[3];
-  double (*dij_diag)[3];
-  double (*dij_offdiag)[3];
   // -------------------------------------------------------------------------------
 
 public:   // member functions
@@ -314,9 +314,21 @@ public:   // member functions
       ar_diag[icv][2] = AR[2][2];       ar_offdiag[icv][2] = AR[1][2];
 
       // debugging
-      debug1[icv][0] = CIR[0][0];       debug2[icv][0] = CIR[0][1];
-      debug1[icv][1] = CIR[1][0];       debug2[icv][1] = CIR[1][1];
-      debug1[icv][2] = CIR[2][0];       debug2[icv][2] = CIR[2][1];
+      debug1[icv][0] = DIM[0][0];
+      debug1[icv][1] = 0.0;
+      debug1[icv][2] = 0.0;
+
+      debug2[icv][0] = CIR[0][0];
+      debug2[icv][1] = CIR[1][0];
+      debug2[icv][2] = CIR[2][0];
+
+      debug3[icv][0] = CIR[0][1];
+      debug3[icv][1] = CIR[1][1];
+      debug3[icv][2] = CIR[2][1];
+
+      debug4[icv][0] = CIR[0][2];
+      debug4[icv][1] = CIR[1][2];
+      debug4[icv][2] = CIR[2][2];
 
       if (rij_offdiag[icv][0] != rij_offdiag[icv][0])
         marker[icv] = 1;
@@ -328,16 +340,6 @@ public:   // member functions
       rij_offdiag_nd[icv][0] = REY[0][1];
       rij_offdiag_nd[icv][1] = REY[0][2];
       rij_offdiag_nd[icv][2] = REY[1][2];
-
-      dij_diag[icv][0] = DIM[0][0];
-      dij_diag[icv][1] = DIM[1][1];
-      dij_diag[icv][2] = DIM[2][2];
-
-      dij_offdiag[icv][0] = DIM[0][1];
-      dij_offdiag[icv][1] = DIM[0][2];
-      dij_offdiag[icv][2] = DIM[1][2];
-
-      //linearizeASBMstress(icv);
     }
 
     updateCvData(rij_diag, REPLACE_ROTATE_DATA);
@@ -1251,11 +1253,11 @@ public:
     calcTurbLengthScale();
 
     // eddy-viscosity at cell center
-    for (int icv = 0; icv < ncv; icv++)
+    /*for (int icv = 0; icv < ncv; icv++)
     {
       double omega_tilde = max(omega[icv], cLim*strMag[icv]/sqrt(betaStar));
       temp_muT[icv] = min(rho[icv]*kine[icv]/omega_tilde, 100.0);
-    }
+    }*/
     
     // compute wall blocking tensor
     if ( step%block_frq == 0 )

@@ -1,6 +1,6 @@
 !=================================== ASBM ====================================80
 !
-! Computes the Reynolds stresses using the Algebraic Structure-based Model. 
+! Computes the Reynolds stresses using the Algebraic Structure-based Model.
 ! On return:
 !   ierr = 0 ok
 !   ierr = 1 norm of error for AS implicit eq. too large
@@ -10,18 +10,18 @@
 !
 !=============================================================================80
 
-  subroutine asbm(st, wt, wft, bl, as, ar, rey, dmn, cir, ktrmax, bltype, ierr)
+  subroutine asbm(s, w, wft, bl, as, ar, rey, dmn, cir, ktrmax, bltype, ierr)
     implicit none
     integer, parameter  :: dp = selected_real_kind(15, 307) !double precision
 
     ! INITIAL DECLARATIONS
     ! Routine's inputs and outputs
-    real(dp), dimension(3,3), intent(in)    :: st  !(Rate of strain)*timescale
-    real(dp), dimension(3,3), intent(in)    :: wt  !(Mean rotation)*timescale
+    real(dp), dimension(3,3), intent(in)    :: s   !(Rate of strain)*timescale
+    real(dp), dimension(3,3), intent(in)    :: w   !(Mean rotation)*timescale
     real(dp), dimension(3,3), intent(in)    :: wft !(Frame rotation)*timescale
     real(dp), dimension(3,3), intent(in)    :: bl  !wall blocking tensor
-    real(dp), dimension(3,3), intent(inout) :: as  !eddy axis tensor from st
-    real(dp), dimension(3,3), intent(inout) :: ar  !eddy axis tensor from st, wt
+    real(dp), dimension(3,3), intent(inout) :: as  !eddy axis tensor from s
+    real(dp), dimension(3,3), intent(inout) :: ar  !eddy axis tensor from s, w
 
     real(dp), dimension(3,3), intent(out)   :: rey  !reynolds stresses
     real(dp), dimension(3,3), intent(out)   :: dmn  !dimensionality
@@ -44,6 +44,8 @@
     real(dp), parameter                     :: twoth = 2.0_dp*third
     real(dp), parameter                     :: one = 1.0_dp
     real(dp), parameter                     :: two = 2.0_dp
+    real(dp), parameter                     :: three = 3.0_dp
+    real(dp), parameter                     :: six = 6.0_dp
     real(dp), parameter, dimension(3,3)     :: delta =                         &
          reshape((/1., 0., 0., 0., 1., 0., 0., 0., 1./),(/3,3/))
     real(dp), parameter, dimension(3,3,3)   :: eps =                           &
@@ -61,35 +63,41 @@
 
     logical                  :: strain        !true for strained flows
     logical                  :: rotation      !true for flows with mean rot
-    logical                  :: rotation_t    !true for flows with total rot
     logical                  :: converged     !used for N-R solver
     
+    real(dp), dimension(3,3) :: sw            !s_ik*w_kj
+    real(dp), dimension(3,3) :: ss            !s_ik*s_kj
+    real(dp), dimension(3,3) :: ww            !w_ik*w_kj
+    real(dp), dimension(3,3) :: wss           !w_ip*s_pq*s_qj
+    real(dp), dimension(3,3) :: wws           !w_ip*w_pq*s_qj
+    real(dp), dimension(3,3) :: wsww          !w_ip*s_pq*w_qt*w_tj 
+    real(dp), dimension(3,3) :: swss          !s_ip*w_pq*s_qt*s_tj
+    real(dp), dimension(3,3) :: wwss          !w_ip*w_pq*s_qt*s_tj
+    real(dp), dimension(3,3) :: wssww         !w_ip*s_pq*s_qt*w_tr*s_rj
+    real(dp)                 :: trace_ss      !s_ik*s_ki
+    real(dp)                 :: trace_ww      !w_ik*w_ki
+    real(dp)                 :: trace_sss     !s_ip*s_pq*s_qi
+    real(dp)                 :: trace_wws     !w_ip*w_pq*s_qi
+    real(dp)                 :: trace_wwss    !w_ip*w_pq*s_qt*s_ti
+    real(dp), dimension(3,3) :: basis1        !1st element of integrity basis   
+    real(dp), dimension(3,3) :: basis2        !2nd element of integrity basis
+    real(dp), dimension(3,3) :: basis3        !3rd element of integrity basis
+    real(dp), dimension(3,3) :: basis4        !4th element of integrity basis
+    real(dp), dimension(3,3) :: basis5        !5th element of integrity basis
+    real(dp), dimension(3,3) :: basis6        !6th element of integrity basis
+    real(dp), dimension(3,3) :: basis7        !7th element of integrity basis
+    real(dp), dimension(3,3) :: basis8        !8th element of integrity basis
+    real(dp), dimension(3,3) :: basis9        !9th element of integrity basis
+    real(dp), dimension(3,3) :: basis10       !10th element of integrity basis
+    real(dp), dimension(3,3) :: test
+
     real(dp), dimension(3,3) :: a             !eddy axis tensor
-    real(dp), dimension(3,3) :: wtt           !frame + mean rotation
-    real(dp), dimension(3,3) :: stst          !st_ik*st_kj
-    real(dp), dimension(3,3) :: wtwt          !wt_ik*wt_kj
-    real(dp), dimension(3,3) :: wtst          !wt_ik*wt_kj
-    real(dp)                 :: trace_stst    !st_ik*st_ki
-    real(dp)                 :: trace_wtwt    !-wt_ik*wt_ki
-    real(dp)                 :: trace_sta     !st_ik*a_ki
-    real(dp)                 :: trace_ststa   !st_kp*st_kq*a_pq 
-    real(dp)                 :: trace_wtsta   !wt_qr*st_rp*a_pq
-    real(dp)                 :: trace_wttwtt  !-wTt_ij*wTt_ji
-    real(dp)                 :: trace_aa      !a_ij*a_ji
-    real(dp)                 :: trace_ast     !a_ij*st_ji
     real(dp)                 :: trace_bl      !bl_ii
-    real(dp)                 :: mag_ststa     !sqrt(st_kp*st_kq*a_pq)
-    real(dp)                 :: norm_st       !norm of st_ik       
-    real(dp)                 :: norm_wt       !norm of wt_ik
-    
-    real(dp), dimension(3)   :: vec_wtt       !vector for frame + mean rotation
-    real(dp), dimension(3)   :: vec_wdt       !vector for frame - mean rotation
-    real(dp)                 :: dot_vec_wtt   !dot product of vec_wtt
-    real(dp)                 :: dot_vec_wdt   !dot product of vec_wdt
-    real(dp)                 :: mag_vec_wtt   !magnitude of vec_wtt
+    real(dp)                 :: norm_s        !norm of s_ik
+    real(dp)                 :: norm_w        !norm of w_ik
 
     ! variables for the strained-only eddy-axis tensor
-    real(dp)                 :: i2, i3        !first and second invariant of st
+    real(dp)                 :: i2, i3        !firs and second invariant of s
     real(dp)                 :: na,nb,nc,nd   !coefficients for N equation
     real(dp)                 :: ndelta        !discriminant for N equation
     real(dp)                 :: ndelta0       !variable for N equation
@@ -99,26 +107,18 @@
     real(dp)                 :: as_alpha      !part of denom. for as coeff's
     real(dp)                 :: as_a          !coeff for as
     real(dp)                 :: as_b          !coeff for as
-    real(dp)                 :: as_c          !coeff for as
-    real(dp), dimension(3,3) :: sta           !st_ik*a_kj
-    real(dp), dimension(3,3) :: error         !error for as
-    real(dp)                 :: norm_error    !norm of the error
 
     ! variables for the rotated eddy-axis tensor
-    real(dp)                 :: r_ratio       !wt_qr*st_rp*a_pq/st_kn*st_nm*a_mk
+    real(dp)                 :: trace_aa      !a_ij*a_ji
+    real(dp)                 :: r_ratio       !w_qr*s_rp*a_pq/s_kn*s_nm*a_mk
     real(dp)                 :: alpha         !2nd coeff for rot matrix H
     real(dp)                 :: beta          !3rd coeff for rot matrix H
     real(dp)                 :: alpha2        !alpha squared
     real(dp)                 :: term          !needed for beta
-    real(dp)                 :: c2            !normalized 2nd coeff for H
-    real(dp)                 :: c3            !normalized 3rd coeff for H
-    real(dp), dimension(3,3) :: h             !rotation matrix H
 
     ! variables for the structure  scalars
-    real(dp)                 :: hat_wt        !-a_ij*wt_ik*wt_kj
-    real(dp)                 :: hat_wtt       !-a_ij*wTt_ik*wTt_kj  
-    real(dp)                 :: hat_st        !a_ij*st_ik*st_kj
-    real(dp)                 :: hat_x         !a_ij*wTt_ik*st_kj
+    real(dp)                 :: hat_w         !-a_ij*w_ik*w_kj
+    real(dp)                 :: hat_s         !a_ij*s_ik*s_kj
     real(dp)                 :: eta_r         !mean rot over strain parameter
     real(dp)                 :: eta_f         !frame rot over strain parameter
     real(dp)                 :: eta_c1        !used to compute eta_r
@@ -129,6 +129,7 @@
     real(dp)                 :: phi           !jettal scalar
     real(dp)                 :: bet           !correlation scalar
     real(dp)                 :: chi           !flattening scalar
+    real(dp)                 :: gam           !helical scalar
 
     real(dp)                 :: phis          !jettal scalar for any a
     real(dp)                 :: bets          !correlation scalar for any a
@@ -138,163 +139,153 @@
     real(dp)                 :: bet1          !correlation scalar for shear
     real(dp)                 :: chi1          !flattening scalar for shear
 
-    real(dp)                 :: scl_g         !helical scalar
-    real(dp), dimension(3)   :: vec_g         !helical vector
-
     real(dp)                 :: struc_weight  !smoothing parameter
     real(dp)                 :: xp_aa         !extrapolation along trace_aa
 
+    real(dp)                 :: big_phi       !-half + three*half*phi
+    real(dp)                 :: big_gam       !gam/sqrt(2)
+    real(dp), dimension(10)  :: coeff_p       !phi coeff for integrity basis
+    real(dp), dimension(10)  :: coeff_g       !gamma coeff for integrity basis
+    real(dp), dimension(10)  :: coeff         !combined coeff_p and coeff_g
+    real(dp), dimension(3,3) :: b             !anisotropic component of rij
+
     continue
 
-    ! INITIALIZE AND CALCULATE TENSOR PRODUCTS
     ierr = 0
 
-    ! initialize default value for A
-    a(1,1) = third
-    a(2,1) = zero
-    a(3,1) = zero
+    ! --------------------------------------------------------------------------
+    ! COMPUTE TENSOR BASIS AND INVARIANTS
+    ! --------------------------------------------------------------------------
+    sw    = zero
+    ss    = zero
+    ww    = zero
+    wss   = zero
+    wws   = zero
+    wsww  = zero
+    swss  = zero
+    wwss  = zero
+    wssww = zero
 
-    a(1,2) = zero
-    a(2,2) = third
-    a(3,2) = zero
-    
-    a(1,3) = zero
-    a(2,3) = zero
-    a(3,3) = third
-    
-    ! tensor products
-    stst = zero
-    wtwt = zero
-    wtst = zero
-
-    trace_stst = zero
-    trace_wtwt = zero
+    trace_ss   = zero
+    trace_ww   = zero
+    trace_sss  = zero
+    trace_wws  = zero
+    trace_wwss = zero
 
     do i = 1,3
       do j = 1,3
         do k = 1,3
-          stst(i,j) = stst(i,j) + st(i,k)*st(k,j)
-          wtwt(i,j) = wtwt(i,j) + wt(i,k)*wt(k,j)
-          wtst(i,j) = wtst(i,j) + wt(i,k)*st(k,j)
+          sw(i,j) = sw(i,j) + s(i,k)*w(k,j)
+          ss(i,j) = ss(i,j) + s(i,k)*s(k,j)
+          ww(i,j) = ww(i,j) + w(i,k)*w(k,j)
         end do
       end do
-
-      trace_stst = trace_stst + stst(i,i)
-      trace_wtwt = trace_wtwt - wtwt(i,i)
+      trace_ss = trace_ss + ss(i,i)
+      trace_ww = trace_ww + ww(i,i)
     end do
 
-    if (trace_stst > zero) then
+    do i = 1,3
+      do j = 1,3
+        do k = 1,3
+          wss(i,j) = wss(i,j) + w(i,k)*ss(k,j)
+          wws(i,j) = wws(i,j) + ww(i,k)*s(k,j)
+          swss(i,j) = swss(i,j) + sw(i,k)*ss(k,j)
+          wwss(i,j) = wwss(i,j) + ww(i,k)*ss(k,j)
+          do l = 1,3
+            wsww(i,j) = wsww(i,j) + w(i,k)*s(k,l)*ww(l,j)
+            wssww(i,j) = wssww(i,j) + w(i,k)*ss(k,l)*ww(l,j)
+          end do
+        end do
+        trace_sss = trace_sss + ss(i,j)*s(j,i)
+      end do
+      trace_wws = trace_wws + wws(i,i)
+      trace_wwss = trace_wwss + wwss(i,i)
+    end do
+
+    ! elements of integrity basis
+    basis1  = s
+    basis2  = sw + transpose(sw)
+    basis3  = ss - third*trace_ss*delta
+    basis4  = ww - third*trace_ww*delta
+    basis5  = wss + transpose(wss)
+    basis6  = wws + transpose(wws) - twoth*trace_wws*delta
+    basis7  = wsww + transpose(wsww)
+    basis8  = swss + transpose(swss)
+    basis9  = wwss + transpose(wwss) - twoth*trace_wwss*delta
+    basis10 = wssww + transpose(wssww)
+
+    if (trace_ss > zero) then
       strain = .true.
-      norm_st = sqrt(trace_stst)
+      norm_s = sqrt(trace_ss)
     else
       strain  = .false.
-      norm_st = zero
+      norm_s = zero
     end if
 
-    if (trace_wtwt > zero) then
+    if (trace_ww < zero) then
       rotation = .true.
-      norm_wt = sqrt(trace_wtwt)
+      norm_w = sqrt(-trace_ww)
     else
       rotation = .false.
-      norm_wt  = zero
+      norm_w  = zero
     end if
 
     ! --------------------------------------------------------------------------
-    ! COMPUTE AS
+    ! COEFFICIETNS FOR AS
     ! --------------------------------------------------------------------------
+    as_a = zero
+    as_b = zero
+
     ! check for strain
-    purestrain: if (strain) then      
+    purestrain: if (strain) then
       ! invariants
-      i2 = -half*trace_stst
-      i3 = zero
-      do i = 1,3
-         do j = 1,3
-            i3 = i3 + stst(i,j)*st(j,i)
-         end do
-      end do
-      i3 = third*i3
+      i2 = -half*trace_ss
+      i3 = third*trace_sss
 
       ! compute N 
-      na = 3.0_dp
-      nb = -3.0_dp*a0
+      na = three
+      nb = -three*a0
       nc = 12.0_dp*i2
       nd = -(4.0_dp*a0*i2 + 24.0_dp*i3)
 
-      ndelta = 18.0_dp*na*nb*nc*nd - 4.0_dp*nb**3.0_dp*nd + nb**two*nc**two    &
-               - 4.0_dp*na*nc**3.0_dp - 27.0_dp*na**two*nd**two
-      ndelta0 = nb**two - 3.0_dp*na*nc
-      ndelta1 = two*nb**3.0_dp - 9.0_dp*na*nb*nc + 27.0_dp*na**two*nd
+      ndelta = 18.0_dp*na*nb*nc*nd - 4.0_dp*nb**three*nd + nb**two*nc**two    &
+               - 4.0_dp*na*nc**three - 27.0_dp*na**two*nd**two
+      ndelta0 = nb**two - three*na*nc
+      ndelta1 = two*nb**three - 9.0_dp*na*nb*nc + 27.0_dp*na**two*nd
 
       p1 = half*ndelta1
-      p2 = half*3.0_dp*na*sqrt(3.0_dp*abs(ndelta))
+      p2 = half*three*na*sqrt(three*abs(ndelta))
 
       nbig = nb
       if (ndelta <= zero) then
         nbig = nbig + (p1 + p2)**(third) + ndelta0*(p1 + p2)**(-third)
       else
-        nbig = nbig + two*(p1*p1 + p2*p2)**(1.0_dp/6.0_dp)*                    &
+        nbig = nbig + two*(p1*p1 + p2*p2)**(one/six)*                    &
                cos(third*acos(p1/sqrt(p1*p1 + p2*p2)) + twoth*pi)
       end if
       nbig = -third*nbig/na
 
       ! compute as
-      as_alpha = 3.0_dp*nbig**two + 4.0_dp*i2
+      as_alpha = three*nbig**two + 4.0_dp*i2
 
-      as_a = 8.0_dp*i2/(3.0_dp*as_alpha)
-      as_b = two*nbig/as_alpha
-      as_c = 4.0_dp/as_alpha
-
-      a = as_a*delta + as_b*st + as_c*stst
-
-      ! check accuracy of solution
-      sta = zero
-      trace_sta = zero
-      do i = 1,3
-        do j = 1,3
-          do k = 1,3
-            sta(i,j) = sta(i,j) + st(i,k)*a(k,j)
-          end do
-        end do
-        trace_sta = trace_sta + sta(i,i)
-      end do
-
-      do i = 1,3
-        do j = 1,3
-          error(i,j) = a(i,j)*nbig -                                           &
-                       (sta(i,j) + sta(j,i) - twoth*trace_sta*delta(i,j)) -    &
-                       twoth*st(i,j)
-        end do
-      end do
-
-      norm_error = error(1,1)**2 + error(1,2)**2 + error(1,3)**2 +             &
-                   error(2,1)**2 + error(2,2)**2 + error(2,3)**2 +             &
-                   error(3,1)**2 + error(3,2)**2 + error(3,3)**2
-      if (norm_error > small) then
-        ierr = 1
-      end if
-
-      ! total strained-only eddy axis tensor  
-      a = third*delta + a
+      as_a = two*nbig/as_alpha
+      as_b = 4.0_dp/as_alpha
 
     end if purestrain
 
-    ! update as
-    as = a
+    ! --------------------------------------------------------------------------
+    ! COEFFICIENTS FOR AR
+    ! --------------------------------------------------------------------------
+    alpha = zero
+    beta  = zero
 
-    ! --------------------------------------------------------------------------
-    ! COMPUTE AR
-    ! --------------------------------------------------------------------------
     ! check for rotation
     purerotation: if (rotation) then
 
-      trace_aa = zero
-      do i = 1,3
-        do j = 1,3
-          trace_aa = trace_aa + a(i,j)*a(j,i)
-        end do
-      end do
+      trace_aa = third + as_a**two*trace_ss +                                  &
+                 one/six*as_b**two*trace_ss**two + two*as_a*as_b*trace_sss
 
-      r_ratio = trace_wtwt/trace_stst*(1.5_dp*(trace_aa - third))**half
+      r_ratio = -trace_ww/trace_ss*(1.5_dp*(trace_aa - third))**half
 
       ! compute alpha and beta
       if (r_ratio < one) then
@@ -310,53 +301,25 @@
       if (term < zero) term = zero
       beta = 2.0_dp - sqrt(term)
 
-      c2 = alpha/norm_wt
-      c3 = beta/trace_wtwt
-        
-      ! compute rotation matrix h
-      do i = 1,3
-        do j = 1,3
-          h(i,j) = delta(i,j) + c2*wt(i,j) + c3*wtwt(i,j)
-        end do
-      end do
-
-      ! compute ar
-      do i = 1,3
-        do j = i,3
-
-          a(i,j) = zero
-          do k = 1,3
-            do l = 1,3
-              a(i,j) = a(i,j) + h(i,k)*h(j,l)*as(k,l)
-            end do
-          end do
-
-          a(j,i) = a(i,j)
-        end do
-      end do
-
     end if purerotation
 
-    ! update ar
-    ar = a
+    ! coefficients for eddy-axis tensor
+    coeff_p(1)  = as_a*(one - half*(beta**two - two*beta))
+    coeff_p(2)  = -one/sqrt(-trace_ww)*as_a*alpha
+    coeff_p(3)  = as_b*(one - half*(beta**two - two*beta))
+    coeff_p(4)  = - trace_ss/trace_ww*as_b*beta*(beta - two)                   &
+                  + trace_wws/(trace_ww**two)*as_a*beta**two                   &
+                  + trace_wwss/(trace_ww**two)*as_b*beta**two
+    coeff_p(5)  = one/sqrt(-trace_ww)*as_b*alpha
+    coeff_p(6)  = one/trace_ww*as_a*(beta**two - three*beta)
+    coeff_p(7)  = -one/(sqrt(-trace_ww)*trace_ww)*as_a*alpha*beta
+    coeff_p(8)  = zero
+    coeff_p(9)  = one/trace_ww*as_b*(beta**two - three*beta)
+    coeff_p(10) = -one/(sqrt(-trace_ww)*trace_ww)*as_b*alpha*beta
 
     ! --------------------------------------------------------------------------
     ! COMPUTE STRUTURE SCALARS
     ! --------------------------------------------------------------------------
-    trace_wttwtt = zero
-    trace_ststa  = zero
-    trace_aa     = zero
-    trace_ast    = zero
-    
-    do i = 1,3
-      do j = 1,3
-        wtt(i,j)     = wft(i,j) + wt(i,j)
-        trace_wttwtt = trace_wttwtt + wtt(i,j)*wtt(i,j)
-        trace_ststa  = trace_ststa + a(i,j)*stst(i,j)
-        trace_aa     = trace_aa + a(i,j)*a(j,i)
-        trace_ast    = trace_ast + a(i,j)*st(j,i)
-      end do
-    end do
 
     ! bounds check for trace_aa
     if (trace_aa > one) then
@@ -371,64 +334,36 @@
       ierr = 2
     end if
 
-    ! 1/2 vorticity vector + angular velocity vector
-    vec_wtt(1) = wtt(3,2)
-    vec_wtt(2) = wtt(1,3)
-    vec_wtt(3) = wtt(2,1)
+    ! compute eta_r
+    hat_w = third*trace_ww                                                     &
+          + coeff_p(1)*trace_wws                                               &
+          + coeff_p(3)*(trace_wwss - third*trace_ss*trace_ww)                  &
+          + coeff_p(4)*one/six*trace_ww**two                                   &
+          + coeff_p(6)*third*trace_ww*trace_wws                                &
+          + coeff_p(9)*third*trace_ww*trace_wwss
 
-    ! relative rate-of-rotation vector
-    vec_wdt(1) = wft(3,2) - wt(3,2)
-    vec_wdt(2) = wft(1,3) - wt(1,3)
-    vec_wdt(3) = wft(2,1) - wt(2,1)
-    
-    ! their magninuteds
-    dot_vec_wtt = vec_wtt(1)**two + vec_wtt(2)**two + vec_wtt(3)**two
-    dot_vec_wdt = vec_wdt(1)**two + vec_wdt(2)**two + vec_wdt(3)**two
+    hat_s = third*trace_ss                                                     &
+          + coeff_p(1)*trace_sss                                               &
+          + coeff_p(3)*one/six*trace_ss**two                                   &
+          + coeff_p(4)*(trace_wwss - third*trace_ss*trace_ww)                  &
+          + coeff_p(6)*(third*trace_ss*trace_wws + twoth*trace_ww*trace_sss)   &
+          + coeff_p(9)*(third*trace_ss*trace_wwss + twoth*trace_wws*trace_sss)
 
-    ! check for total rotation
-    if (dot_vec_wtt > zero) then
-      mag_vec_wtt = sqrt(dot_vec_wtt)
-      rotation_t = .true.
-    else
-      mag_vec_wtt = zero
-      rotation_t = .false.
-    end if
+    eta_c1 = -hat_w/(hat_s + 1.0e-06_dp)
 
-    ! compute quantities based on total rotation rate
-    hat_wt  = zero        
-    hat_wtt = zero 
-    hat_st  = zero                
-    hat_x   = zero  
-       
-    do i = 1,3
-      do j = 1,3
-        do k = 1,3
-          hat_wt  = hat_wt + a(i,j)*wt(i,k)*wt(j,k)
-          hat_wtt = hat_wtt + a(i,j)*wtt(i,k)*wtt(j,k)
-          hat_st  = hat_st + a(i,j)*st(i,k)*st(j,k)
-          hat_x   = hat_x + a(i,j)*wtt(j,k)*st(k,i)
-        end do
-      end do
-    end do
-
-    ! compute structure parameters
-    eta_c1 = hat_wt/(hat_st + 1.0e-06_dp)
-    eta_c2 = hat_wtt/hat_st
-    
     if ((eta_c1 < zero) .or. (eta_c1 /= eta_c1)) eta_c1 = zero
-    if ((eta_c2 < zero) .or. (eta_c2 /= eta_c2)) eta_c2 = zero
 
     eta_r = sqrt(eta_c1)
     eta_f = zero
 
     ! compute phis, chis, bets
-    if (hat_st < zero) then
+    if (hat_s < zero) then
       ! without strain
       phis = zero
       chis = zero
       bets = one
 
-      if (hat_wtt > zero) then
+      if (hat_w > zero) then
         ! with rotation
         phis = third
         chis = zero
@@ -464,44 +399,45 @@
     struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)  !ale
     bet = bet*(one - struc_weight) + bet1*(struc_weight) !ale
 
-    ! compute helical scalar
-    scl_g = two*phi*(one - phi)/(one + chi)
-    if (scl_g < zero) scl_g = zero
-    scl_g = bet*sqrt(scl_g)
-
-    ! IMPOSE BLOCKAGE MODIFICATIONS
-    if (bltype == 0) then
-      ! blockage correction to eddy-axis tensor
-      call blocking(a,bl,delta,ierr)
-
-      ! blockage correction to phi and gamma
-      trace_bl = bl(1,1) + bl(2,2) + bl(3,3)
-
-      phi = one - (one - trace_bl)**two + phi*(one - trace_bl)**two
-      scl_g = (one - trace_bl)*scl_g
-      !chi = (one - trace_bl)*chi
-    endif
-    
-    if (rotation_t) then
-    ! compute helical vector
-      do k = 1,3
-        vec_g(k) = scl_g*vec_wtt(k)/mag_vec_wtt
-      end do
-    else
-      do k = 1,3
-        vec_g(k) = zero
-      end do
-    end if
+    ! compute helical scalar and vector
+    gam = two*phi*(one - phi)/(one + chi)
+    if (gam < zero) gam = zero
+    gam = bet*sqrt(gam)
 
     ! --------------------------------------------------------------------------
     ! COMPUTE STRUCTURE TENSORS
     ! --------------------------------------------------------------------------
-    call structure(rey, dmn, cir, a, phi, chi, vec_g, vec_wdt,                 &
-                   dot_vec_wdt, rotation_t, delta, eps, ierr)
+    big_phi = -half + half*three*phi
+    big_gam = gam/sqrt(two)
 
-    ! Output some useful data
-    dmn = rey
+    ! coefficients for the Reynolds stresses
+    coeff_g(1)  = as_a*(alpha - alpha*beta)
+    coeff_g(2)  = -one/sqrt(-trace_ww)*as_a*(one - half*beta)
+    coeff_g(3)  = as_b*(alpha - alpha*beta)
+    coeff_g(4)  = trace_ss/trace_ww*two*as_b*(alpha - alpha*beta)              &
+                + trace_wws/(trace_ww**two)*two*as_a*alpha*beta                &
+                + trace_wwss/(trace_ww**two)*two*as_b*alpha*beta
+    coeff_g(5)  = one/sqrt(-trace_ww)*as_b*(one - half*beta)
+    coeff_g(6)  = -one/trace_ww*as_a*three*(alpha - twoth*alpha*beta)
+    coeff_g(7)  = one/(sqrt(-trace_ww)*trace_ww)*as_a*(beta**two - three*beta)
+    coeff_g(8)  = zero
+    coeff_g(9)  = -one/trace_ww*three*as_b*(alpha - twoth*alpha*beta)
+    coeff_g(10) = one/(sqrt(-trace_ww)*trace_ww)*as_b*(beta**two - three*beta)
 
+    do i = 1,10
+      coeff(i) = big_phi*coeff_p(i) + big_gam*coeff_g(i)
+    end do
+
+    b = coeff(1)*basis1 + coeff(2)*basis2 + coeff(3)*basis3 +                  &
+        coeff(4)*basis4 + coeff(5)*basis5 + coeff(6)*basis6 +                  &
+        coeff(7)*basis7 + coeff(8)*basis8 + coeff(9)*basis9 +                  &
+        coeff(10)*basis10
+
+    rey = third*delta + b
+
+    ! --------------------------------------------------------------------------
+    ! NEAR-WALL CORRECTION
+    ! --------------------------------------------------------------------------
     if (bltype == 1) then
       ! blockage correction to Reynolds stress tensor
       ! Note: The other tensors need to be updated
@@ -509,23 +445,27 @@
     endif
 
     ! Output some useful data
-    cir(1,1) = phi
-    cir(1,2) = bet
-    cir(1,3) = chi
+    dmn(1,1) = coeff(1)
+    dmn(1,2) = phi
+    dmn(1,3) = gam
 
-    cir(2,1) = eta_r
-    cir(2,2) = eta_f
-    cir(2,3) = trace_aa
+    cir(1,1) = coeff(2)
+    cir(1,2) = coeff(3)
+    cir(1,3) = coeff(4)
+
+    cir(2,1) = coeff(5)
+    cir(2,2) = coeff(6)
+    cir(2,3) = coeff(7)
     
-    cir(3,1) = vec_g(1)
-    cir(3,2) = vec_g(2)
-    cir(3,3) = vec_g(3)
+    cir(3,1) = coeff(8)
+    cir(3,2) = coeff(9)
+    cir(3,3) = coeff(10)
 
   end subroutine asbm
 
 !=============================== INT_ER_LT_ONE ===============================80
 !
-! Computes the structure parameters for an arbitrary a_ij by interpolating 
+! Computes the structure parameters for an arbitrary a_ij by interpolating
 ! between the plane strain and pure shear states.
 !
 !=============================================================================80
@@ -593,7 +533,7 @@
 
 !=============================== INT_ER_GT_ONE ===============================80
 !
-! Computes the structure parameters for an arbitrary a_ij by extrapolating 
+! Computes the structure parameters for an arbitrary a_ij by extrapolating
 ! for higher values of eta_r than that of pure shear.
 !
 !=============================================================================80
@@ -815,326 +755,3 @@
     end do
 
   end subroutine blocking
-
-!================================ STRUCTURE ==================================80
-!
-! Calculates the normalized reynolds stress, dimensionality, and circulicity
-! tensors.
-!
-!=============================================================================80
-
-  subroutine structure(rey, dmn, cir, a, phi, chi, vec_g, vec_wdt,       &
-       dot_vec_wdt, rotation_t, delta, eps, ierr)
-    implicit none 
-    integer, parameter  :: dp = selected_real_kind(15, 307) !double precision
-
-    ! INITIAL DECLARATIONS
-    ! routine's inputs and outputs
-    real(dp), dimension(3,3), intent(out)   :: rey     !reynolds stresses
-    real(dp), dimension(3,3), intent(out)   :: dmn     !dimensionality
-    real(dp), dimension(3,3), intent(out)   :: cir     !circulicity
-    real(dp), dimension(3,3), intent(in)    :: a       !eddy axis tensor
-    real(dp), dimension(3,3), intent(in)    :: delta   !kronecker delta
-    real(dp), dimension(3,3,3), intent(in)  :: eps     !eps_ikj
-
-    real(dp), intent(in)               :: phi     !jettal scalar
-    real(dp), intent(in)               :: chi     !flattening scalar
-    real(dp), dimension(3), intent(in) :: vec_g   !helical vector
-    real(dp), dimension(3), intent(in) :: vec_wdt !vec for frame - mean rotation
-    real(dp), intent(in)               :: dot_vec_wdt !dot product of vec_wdt
-
-    logical, intent(in)                :: rotation_t
-
-    integer, intent(inout)             :: ierr
-
-    ! constants
-    real(dp), parameter      :: zero = 0.0_dp
-    real(dp), parameter      :: small = 1.0e-14_dp
-    real(dp), parameter      :: half = 0.5_dp
-    real(dp), parameter      :: one = 1.0_dp
-
-    ! variables
-    integer                  :: i, j, k, l, m
-    real(dp), dimension(3,3) :: fl             !flattening tensor
-    real(dp), dimension(3,3) :: afl            !a_in*fl_nj
-    real(dp)                 :: trace_afl      !a_in*fl_ni
-    real(dp)                 :: coef_1, coef_2, coef_3, coef_4, coef_5
-    real(dp)                 :: term
-    real(dp)                 :: suma, sumi, sumj, sumk, sumg
-
-    continue
-    
-    ! compute axisymmetric tensors
-    do i = 1,3
-      do j = i,3
-        rey(i,j) = half*(one - phi)*(delta(i,j) - a(i,j)) + phi*a(i,j)
-        dmn(i,j) = half*(delta(i,j) - a(i,j))
-
-        ! check for stropholysis
-        if (rotation_t) then
-          sumg = zero
-          do k = 1,3
-            suma = zero
-            do l = 1,3
-              suma = suma + eps(k,l,i)*a(l,j) + eps(k,l,j)*a(l,i)
-            end do
-            sumg = sumg + half*vec_g(k)*suma
-          end do
-          rey(i,j) = rey(i,j) + sumg
-        end if
-
-        ! maintain constitutive relation
-        cir(i,j) = delta(i,j) - rey(i,j) -dmn(i,j)
-        
-        ! symmetrize
-        rey(j,i) = rey(i,j)
-        dmn(j,i) = dmn(i,j)
-        cir(j,i) = cir(i,j)
-      end do
-    end do
-
-    ! compute flattened tensors
-    if (chi /= chi ) then
-      ierr = 4
-      return
-    end if
-
-    if (abs(chi) < small) return
-     
-    if(abs(dot_vec_wdt) < small) then
-      fl = zero
-    else
-      do i = 1,3
-        do j = i,3
-          fl(i,j) = vec_wdt(i)*vec_wdt(j)/dot_vec_wdt
-          fl(j,i) = fl(i,j)
-        end do
-      end do
-    end if
-
-    afl = zero
-    trace_afl = zero
-    do i = 1,3
-      do j = 1,3
-        do k = 1,3
-          afl(i,j) = afl(i,j) + a(i,k)*fl(k,j)
-        end do
-      end do
-
-      trace_afl = trace_afl + afl(i,i)
-    end do
-
-    coef_1 = half*(one - chi*(one - trace_afl))
-    coef_2 = -half*(one - chi*(one + trace_afl))
-    coef_3 = -chi*(one - phi)
-    coef_4 = (one - phi)*half*(one + chi*(one - trace_afl))
-    coef_5 = (one - phi)*(-half*(one + chi*(one + trace_afl))) + phi
-
-    do i = 1,3
-      do j = i,3
-        term = fl(i,j) - afl(i,j) - afl(j,i)
-        
-        ! dimensionality
-        dmn(i,j) = coef_1*delta(i,j) + coef_2*a(i,j) + chi*term
-        
-        ! basic terms in Reynolds stress
-        rey(i,j) = coef_4*delta(i,j) + coef_5*a(i,j) + coef_3*term
-        
-        ! check for stropholysis
-        if (rotation_t) then
-          sumg = zero
-          do k = 1,3
-            sumk = zero
-            do l = 1,3
-              sumi = zero
-              sumj = zero
-              do m = 1,3
-                sumi = sumi + eps(m,l,i)*(coef_1*delta(k,m) + chi*fl(k,m) -    &
-                                          chi*afl(k,m))
-                sumj = sumj + eps(m,l,j)*(coef_1*delta(k,m) + chi*fl(k,m) -    &
-                                          chi*afl(k,m))
-              end do
-              sumk = sumk + sumi*a(l,j) + sumj*a(l,i)
-            end do
-            sumg = sumg + vec_g(k)*sumk
-          end do
-          rey(i,j) = rey(i,j) + sumg
-        end if
-
-        ! circulicity
-        cir(i,j) = delta(i,j) - rey(i,j) - dmn(i,j)
-
-        ! symmetrize
-        rey(j,i) = rey(i,j)
-        dmn(j,i) = dmn(i,j)
-        cir(j,i) = cir(i,j)
-      end do
-    end do
-
-  end subroutine structure
-
-!================================= LINSOLVER =================================80
-!
-! Double precision linear algebraic equation solver.
-! Solves a(i,j)*x(j) = b(i) i = 1,...,n
-! fround is a round-off test factor assuming at least 15 digit accuracy.
-! Uses Gaussian elimination with row normalization and selection.
-! On return:
-!   Solution ok:
-!     ierr = 0
-!     x is in b
-!     a is destroyed
-!   Singular matrix or bad dimensioning:
-!     ierr = 1
-!     a and b are destroyed
-!
-!=============================================================================80
-
-  subroutine linsolver(ndim,a,b,n,ierr)
-    implicit none
-    integer, parameter  :: dp = selected_real_kind(15, 307) !double precision
-
-    ! INITIAL DECLARATIONS
-    ! routine's inputs and outputs
-    integer, intent(in)                           :: ndim   !number of columns
-    integer, intent(in)                           :: n      !number of rows
-    integer, intent(inout)                        :: ierr   !error flag
-    real(dp), dimension(ndim,ndim), intent(inout) :: a      !matrix
-    real(dp), dimension(ndim), intent(inout)      :: b      !vector
-
-    ! constants
-    real(dp), parameter :: zero = 0.0_dp
-    real(dp), parameter :: one = 1.0_dp
-    real(dp), parameter :: fround = 1.0e-15_dp
-
-    ! variables
-    integer             :: i, j, k
-    integer             :: ix = 0.0_dp
-    integer             :: nm1, m, mm1, im1
-    real(dp)            :: c, cx, d
-    real(dp)            :: termb, term
-
-    continue
-
-    if (n > ndim) then
-      ! dimensioning error: treat as program error in calls
-      ierr = 1
-      return
-    end if
-
-    ! form the lower triagonal system
-    if (n > 1) then
-      nm1 = n - 1
-      kloop: do k = 1,nm1
-        ! eliminate the last column in the upper M x M matrix
-        m = n - k + 1
-        mm1 = m - 1
-
-        ! normalize each row on its largest element
-        iloop1: do i = 1,m
-          c = zero
-          do j = 1,m
-            cx = abs(a(i,j))
-            if (cx > c) c = cx
-          end do
-
-          ! check for singular matrix
-          if (c == zero) then
-            ierr = 1
-            return
-          end if
-
-          c = one/c
-          do j = 1,m
-            a(i,j) = a(i,j)*c
-          end do
-
-          b(i) = b(i)*c
-        end do iloop1
-
-        ! find the best row ix to eliminate in column M
-        c = zero
-        iloop2: do i = 1,m
-          cx = abs(a(i,m))
-          if (cx > c) then
-            c = cx
-            ix = i
-          end if
-        end do iloop2
-
-        ! check for singular matrix
-        if (c == zero) then
-          ierr = 1
-          return
-        end if
-
-        if (m /= ix) then
-          ! switch rows M and ix
-          c = b(m)
-          b(m) = b(ix)
-          b(ix) = c
-          do j = 1,m
-            c = a(m,j)
-            a(m,j) = a(ix,j)
-            a(ix,j) = c
-          end do
-        end if
-
-        ! eliminate last column using the lowest row in the M x M matrix
-
-        ! check for singular matrix
-        if (a(m,m) == zero) then
-          ierr = 1
-          return
-        end if
-
-        ! column loop
-        iloop3: do i = 1,mm1
-          ! check for column entry
-          if (a(i,m) /= zero) then
-            ! eliminate
-            c = a(i,m)/a(m,m)
-            d = b(i) - c*b(m)
-            if (abs(d) < fround*abs(b(i))) d = zero
-            b(i) = d
-            do j = 1,mm1
-              d = a(i,j) - c*a(m,j)
-              if (abs(d) < fround*abs(a(i,j))) d = 0
-              a(i,j) = d
-            end do
-          end if
-        end do iloop3
-
-      end do kloop
-    end if
-
-    ! compute the back solution
-
-    ! check for singular matrix
-    if (a(1,1) == zero) then
-      ierr = 1
-      return
-    end if
-
-    ! calculate x(1)
-    b(1) = b(1)/a(1,1)
-    if (n > 1) then
-      iloop4: do i = 2,n
-        ! calculate x(i)
-        im1 = i - 1
-        c = b(i)
-        termb = abs(c)
-        do j = 1,im1
-          term = a(i,j)*b(j)
-          c = c - term
-          if (abs(term) > termb) termb = abs(term)
-        end do
-
-        if (abs(c) < fround*termb) c = zero
-        b(i) = c/a(i,i)
-      end do iloop4
-    end if
-
-    ! normal exit
-    ierr = 0
-  end subroutine linsolver

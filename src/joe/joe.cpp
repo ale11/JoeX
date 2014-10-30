@@ -565,12 +565,6 @@ public:
       double *muT = getR1("muT");
       fprintf(fp, "%.12le\t", muT[icv]);
 
-      // Reynolds stresses
-      fprintf(fp, "%.12le\t", dij_diag[icv][0]);
-      fprintf(fp, "%.12le\t", dij_diag[icv][1]);
-      fprintf(fp, "%.12le\t", dij_diag[icv][2]);
-      fprintf(fp, "%.12le\t", dij_offdiag[icv][0]);
-
       fprintf(fp, "\n");
     }
     fclose(fp);
