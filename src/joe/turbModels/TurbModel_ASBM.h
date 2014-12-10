@@ -315,20 +315,20 @@ public:   // member functions
 
       // debugging
       debug1[icv][0] = DIM[0][0];
-      debug1[icv][1] = 0.0;
-      debug1[icv][2] = 0.0;
+      debug1[icv][1] = DIM[1][0];
+      debug1[icv][2] = DIM[2][0];
 
-      debug2[icv][0] = CIR[0][0];
-      debug2[icv][1] = CIR[1][0];
-      debug2[icv][2] = CIR[2][0];
+      debug2[icv][0] = DIM[0][1];
+      debug2[icv][1] = DIM[1][1];
+      debug2[icv][2] = DIM[2][1];
 
-      debug3[icv][0] = CIR[0][1];
-      debug3[icv][1] = CIR[1][1];
-      debug3[icv][2] = CIR[2][1];
+      debug3[icv][0] = DIM[0][2];
+      debug3[icv][1] = DIM[1][2];
+      debug3[icv][2] = DIM[2][2];
 
-      debug4[icv][0] = CIR[0][2];
-      debug4[icv][1] = CIR[1][2];
-      debug4[icv][2] = CIR[2][2];
+      debug4[icv][0] = CIR[0][0];
+      debug4[icv][1] = CIR[1][0];
+      debug4[icv][2] = CIR[2][0];
 
       if (rij_offdiag[icv][0] != rij_offdiag[icv][0])
         marker[icv] = 1;

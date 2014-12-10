@@ -446,20 +446,20 @@
 
     ! Output some useful data
     dmn(1,1) = coeff(1)
-    dmn(1,2) = phi
-    dmn(1,3) = gam
+    dmn(1,2) = coeff(2)
+    dmn(1,3) = coeff(3)
 
-    cir(1,1) = coeff(2)
-    cir(1,2) = coeff(3)
-    cir(1,3) = coeff(4)
+    dmn(2,1) = coeff(4)
+    dmn(2,2) = coeff(5)
+    dmn(2,3) = coeff(6)
 
-    cir(2,1) = coeff(5)
-    cir(2,2) = coeff(6)
-    cir(2,3) = coeff(7)
-    
-    cir(3,1) = coeff(8)
-    cir(3,2) = coeff(9)
-    cir(3,3) = coeff(10)
+    dmn(3,1) = coeff(7)
+    dmn(3,2) = coeff(9)
+    dmn(3,3) = coeff(10)
+
+    cir(1,1) = phi
+    cir(1,2) = gam
+    cir(1,3) = eta_r
 
   end subroutine asbm
 

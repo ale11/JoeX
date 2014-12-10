@@ -170,9 +170,19 @@ void JoeWithModels::initialHook()
     }
 
     if(!checkDataFlag(rhoE))
-      for (int icv = 0; icv < ncv; icv++)
-        rhoE[icv] = press[icv]/(gamma[icv]-1.0) + 0.5/rho[icv]*vecDotVec3d(rhou[icv],rhou[icv])
-                  + rho[icv]*kine[icv];
+    {
+    	if (kine != NULL)
+    	{
+    		for (int icv = 0; icv < ncv; icv++)
+    			rhoE[icv] = press[icv]/(gamma[icv]-1.0) + 0.5/rho[icv]*vecDotVec3d(rhou[icv],rhou[icv])
+                    + rho[icv]*kine[icv];
+    	}
+    	else
+    	{
+    		for (int icv = 0; icv < ncv; icv++)
+    			rhoE[icv] = press[icv]/(gamma[icv]-1.0) + 0.5/rho[icv]*vecDotVec3d(rhou[icv],rhou[icv]);
+    	}
+    }
     updateCvData(rhoE, REPLACE_DATA);
 
     for (int i = 0; i < nnodes; i++)
