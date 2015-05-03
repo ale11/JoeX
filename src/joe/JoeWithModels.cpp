@@ -2589,7 +2589,8 @@ void JoeWithModels::calcRhs(double *rhs_rho, double (*rhs_rhou)[3], double *rhs_
     rhs_rhoE[icv] = 0.0;
 
     for (int i = 0; i < 3; i++)
-      viscFlux[icv][i] = 0.0;
+      velFlux[icv][i] = 0.0;
+    kineFlux[icv] = 0.0;
   }
 
   // set scalars RHS to zero
@@ -3723,9 +3724,9 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
       rhs_rhou[icv0][i] -= Frhou[i];
     rhs_rhoE[icv0] -= FrhoE;
 
-    viscFlux[icv0][0] -= test1;
-    viscFlux[icv0][1] -= test2;
-    viscFlux[icv0][2] -= test3;
+    velFlux[icv0][0] -= test1;
+    velFlux[icv0][1] -= test2;
+    velFlux[icv0][2] -= test3;
 
     // icv1 can be ghost...
     if (icv1 < ncv)
@@ -3734,9 +3735,9 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
         rhs_rhou[icv1][i] += Frhou[i];
       rhs_rhoE[icv1] += FrhoE;
 
-      viscFlux[icv1][0] += test1;
-      viscFlux[icv1][1] += test2;
-      viscFlux[icv1][2] += test3;
+      velFlux[icv1][0] += test1;
+      velFlux[icv1][1] += test2;
+      velFlux[icv1][2] += test3;
     }
   }
 
@@ -3850,9 +3851,9 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
             	rhs_rhou[icv0][2] -= Frhou[2];
             	// viscous flux = 0 for energy equation
 
-            	viscFlux[icv0][0] -= test1;
-            	viscFlux[icv0][1] -= test2;
-            	viscFlux[icv0][2] -= test3;
+            	velFlux[icv0][0] -= test1;
+            	velFlux[icv0][1] -= test2;
+            	velFlux[icv0][2] -= test3;
             }
             else
             {
@@ -3915,9 +3916,9 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
               rhs_rhou[icv0][i] -= Frhou[i];
             rhs_rhoE[icv0] -= FrhoE;
 
-            viscFlux[icv0][0] -= test1;
-            viscFlux[icv0][1] -= test2;
-            viscFlux[icv0][2] -= test3;
+            velFlux[icv0][0] -= test1;
+            velFlux[icv0][1] -= test2;
+            velFlux[icv0][2] -= test3;
           }
         }
         // .............................................................................................
@@ -3971,9 +3972,9 @@ void JoeWithModels::calcViscousFluxNS(double *rhs_rho, double (*rhs_rhou)[3], do
               rhs_rhou[icv0][i] -= Frhou[i];
             rhs_rhoE[icv0] -= FrhoE;
 
-            viscFlux[icv0][0] -= test1;
-            viscFlux[icv0][1] -= test2;
-            viscFlux[icv0][2] -= test3;
+            velFlux[icv0][0] -= test1;
+            velFlux[icv0][1] -= test2;
+            velFlux[icv0][2] -= test3;
           }
         }
       }
@@ -4734,7 +4735,7 @@ void JoeWithModels::calcRhsCoupled(double **rhs, double ***A, int nScal, int fla
   
   for (int icv = 0; icv < ncv; icv++)
     for (int i = 0; i < 3; i++)
-      viscFlux[icv][i] = 0.0;
+      velFlux[icv][i] = 0.0;
 
   // compute Euler and viscous fluxes for NS and scalars
   calcFluxCoupled(rhs, A, nScal, flagImplicit);
@@ -5241,9 +5242,9 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
       for (int i = 0; i < 5+nScal; i++)
         rhs[icv0][i] -= ViscousFlux[i];
       
-      viscFlux[icv0][0] -= temp1;
-      viscFlux[icv0][1] -= temp2;
-      viscFlux[icv0][2] -= temp3;
+      velFlux[icv0][0] -= temp1;
+      velFlux[icv0][1] -= temp2;
+      velFlux[icv0][2] -= temp3;
 
       // icv1 can be ghost...
       if (icv1 < ncv)
@@ -5252,9 +5253,9 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
       
       if (icv1 < ncv)
       {
-        viscFlux[icv1][0] += temp1;
-        viscFlux[icv1][1] += temp2;
-        viscFlux[icv1][2] += temp3;
+        velFlux[icv1][0] += temp1;
+        velFlux[icv1][1] += temp2;
+        velFlux[icv1][2] += temp3;
       }
 
       if (flagImplicit)
@@ -5519,9 +5520,9 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               	rhs[icv0][3] -= ViscousFlux[3];
               	// viscous flux = 0 for energy equation and turb scalars
 
-              	viscFlux[icv0][0] -= temp1;
-              	viscFlux[icv0][1] -= temp2;
-              	viscFlux[icv0][2] -= temp3;
+              	velFlux[icv0][0] -= temp1;
+              	velFlux[icv0][1] -= temp2;
+              	velFlux[icv0][2] -= temp3;
 
               	if (flagImplicit)
               	{
@@ -5648,9 +5649,9 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               for (int i = 0; i < 5+nScal; i++)
                 rhs[icv0][i] -= ViscousFlux[i];
               
-              viscFlux[icv0][0] -= temp1;
-              viscFlux[icv0][1] -= temp2;
-              viscFlux[icv0][2] -= temp3;
+              velFlux[icv0][0] -= temp1;
+              velFlux[icv0][1] -= temp2;
+              velFlux[icv0][2] -= temp3;
 
               if (flagImplicit)
               {
@@ -5842,9 +5843,9 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               for (int i = 0; i < 5+nScal; i++)
                 rhs[icv0][i] -= ViscousFlux[i];
               
-              viscFlux[icv0][0] -= temp1;
-              viscFlux[icv0][1] -= temp2;
-              viscFlux[icv0][2] -= temp3;
+              velFlux[icv0][0] -= temp1;
+              velFlux[icv0][1] -= temp2;
+              velFlux[icv0][2] -= temp3;
 
               if (flagImplicit)
               {
@@ -6037,9 +6038,9 @@ void JoeWithModels::calcFluxCoupled(double **rhs, double ***A, int nScal, int fl
               for (int i = 0; i < 5+nScal; i++)
                 rhs[icv0][i] -= ViscousFlux[i];
               
-              viscFlux[icv0][0] -= temp1;
-              viscFlux[icv0][1] -= temp2;
-              viscFlux[icv0][2] -= temp3;
+              velFlux[icv0][0] -= temp1;
+              velFlux[icv0][1] -= temp2;
+              velFlux[icv0][2] -= temp3;
 
               if (flagImplicit)
               {

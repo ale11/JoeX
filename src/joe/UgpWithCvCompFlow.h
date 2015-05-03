@@ -123,7 +123,8 @@ public:   // constructors/destructors
     rij_diag        = NULL;     registerVector(rij_diag,        "rij_diag",        CV_DATA);
     rij_offdiag     = NULL;     registerVector(rij_offdiag,     "rij_offdiag",     CV_DATA);
 
-    viscFlux        = NULL;     registerVector(viscFlux, "viscFlux", CV_DATA);
+    velFlux         = NULL;     registerVector(velFlux, "velFlux", CV_DATA);
+    kineFlux        = NULL;     registerScalar(kineFlux, "kineFlux", CV_DATA);
 
     // just to take a look at the residual fields
     residField  = NULL;     registerScalar(residField,  "residField",  CV_DATA);
@@ -664,7 +665,8 @@ public:   // member variables
   double (*rij_diag)[3];       ///< diagonal Reynolds stresses at cel center
   double (*rij_offdiag)[3];    ///< off diagonal Reynolds stresses at cel center
 
-  double (*viscFlux)[3];
+  double (*velFlux)[3];      ///< holder of fluxes for velocity
+  double *kineFlux;          ///< holder of fluxes for TKE
 
   double *massFlux_fa;      ///< mass flux for scalar solver
 
@@ -720,7 +722,7 @@ public:   // member variables
   double epsilonSDWLS;
   
   int turbModel;
-  enum TurbModel{NONE, SA, KEPS, KOM, SST, V2F, GARET, ASBMkom, ASBMkeps, EASMkom, EASMkeps};
+  enum TurbModel{NONE, SA, KEPS, KOM, SST, V2F, GARET, ASBMkom, ASBMkeps, EASMkom, EASMkeps, WRSM};
 
 
   // Approximate Riemann solver

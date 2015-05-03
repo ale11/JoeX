@@ -41,8 +41,10 @@ public: // constructor, destructor
     debug1        = NULL;     registerVector(debug1,         "debug1",         CV_DATA);
     debug2        = NULL;     registerVector(debug2,         "debug2",         CV_DATA);
     debug3        = NULL;     registerVector(debug3,         "debug3",         CV_DATA);
-    debug4        = NULL;     registerVector(debug4,         "debug4",         CV_DATA);
-    rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",  CV_DATA);
+    etar          = NULL;     registerScalar(etar,           "etar",           CV_DATA);
+    trace_aa      = NULL;     registerScalar(trace_aa,       "trace_aa",       CV_DATA);
+    r_ratio       = NULL;     registerScalar(r_ratio,        "r_ratio",        CV_DATA);
+    rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",    CV_DATA);
     rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
     // -------------------------------------------------------------------------------
   }
@@ -87,7 +89,9 @@ protected: // member variables
   double (*debug1)[3];
   double (*debug2)[3];
   double (*debug3)[3];
-  double (*debug4)[3];
+  double *etar;
+  double *trace_aa;
+  double *r_ratio;
   double (*rij_diag_nd)[3];
   double (*rij_offdiag_nd)[3];
   // -------------------------------------------------------------------------------
@@ -326,9 +330,9 @@ public:   // member functions
       debug3[icv][1] = DIM[1][2];
       debug3[icv][2] = DIM[2][2];
 
-      debug4[icv][0] = CIR[0][0];
-      debug4[icv][1] = CIR[1][0];
-      debug4[icv][2] = CIR[2][0];
+      trace_aa[icv] = CIR[0][0];
+      r_ratio[icv] = CIR[1][0];
+      etar[icv] = CIR[2][0];
 
       if (rij_offdiag[icv][0] != rij_offdiag[icv][0])
         marker[icv] = 1;

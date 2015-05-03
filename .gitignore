@@ -15,4 +15,6 @@ bin/joe
 
 *.o
 
+*~
+
 vnv/flatplate/results/sst/tecplot.phy

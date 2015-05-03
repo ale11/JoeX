@@ -168,6 +168,12 @@ void UgpWithCvCompFlow::calcViscousFluxScalar_new(double *rhs_rhoScal, double *A
     if (icv1 < ncv)
       rhs_rhoScal[icv1] -= viscFlux;
 
+    if (scalName == "kine")
+    {
+    	kineFlux[icv0] += viscFlux;
+    	if (icv1 < ncv) kineFlux[icv1] -= viscFlux;
+    }
+
     if (flagImplicit)
     {
       AScal[noc00] +=   diff[ifa] * nmag * alpha / smag / rho[icv0];
@@ -211,6 +217,8 @@ void UgpWithCvCompFlow::calcViscousFluxScalar_new(double *rhs_rhoScal, double *A
           double viscFlux = diff[ifa] * nmag * (phi_bfa[ifa] - phi[icv0]) / smag_half;
           rhs_rhoScal[icv0] += viscFlux;
 
+          if (scalName == "kine") kineFlux[icv0] += viscFlux;
+
           if (flagImplicit)
             AScal[noc00] += diff[ifa] * nmag / smag_half / rho[icv0];
         }
@@ -235,6 +243,8 @@ void UgpWithCvCompFlow::calcViscousFluxScalar_new(double *rhs_rhoScal, double *A
 
           double viscFlux = diff[ifa] * nmag * (phi_bfa[ifa] - phi[icv0]) / smag_half;
           rhs_rhoScal[icv0] += viscFlux;
+
+          if (scalName == "kine") kineFlux[icv0] += viscFlux;
 
           if (flagImplicit)
             AScal[noc00] += diff[ifa] * nmag / smag_half / rho[icv0];
@@ -261,6 +271,8 @@ void UgpWithCvCompFlow::calcViscousFluxScalar_new(double *rhs_rhoScal, double *A
           double viscFlux = diff[ifa] * nmag * (phi_bfa[ifa] - phi[icv0]) / smag_half;                // TODO: phi_bfa or phiBCval??
           rhs_rhoScal[icv0] += viscFlux;
 
+          if (scalName == "kine") kineFlux[icv0] += viscFlux;
+
           if (flagImplicit)
             AScal[noc00] += diff[ifa] * nmag / smag_half / rho[icv0];
         }
@@ -283,6 +295,10 @@ void UgpWithCvCompFlow::calcViscousFluxScalar_new(double *rhs_rhoScal, double *A
       }
     }
   }
+
+  if (scalName == "kine")
+  	for (int icv = 0; icv < ncv; icv++)
+  		kineFlux[icv] /= (rho[icv]*cv_volume[icv]);
 
 }
 

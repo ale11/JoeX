@@ -379,7 +379,8 @@
       else 
         call int_er_gt_one(eta_r,eta_f,oma,sqamth,phis,bets,chis,phi1,bet1,chi1)
       end if
-      struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)
+      struc_weight = exp(-1000.0_dp*abs(eta_r - one)**two)
+      !phis = phis*(one - struc_weight) + phi1*(struc_weight)
       bets = bets*(one - struc_weight) + bet1*(struc_weight)
       chis = chis*(one - struc_weight) + chi1*(struc_weight)
     end if
@@ -396,7 +397,7 @@
       bet = one - max(one - 0.9_dp*(eta_r - one)**0.31_dp, zero)*              &
                   (1.5_dp*(trace_aa - third))**10.0_dp
     end if
-    struc_weight = exp(-100.0_dp*abs(eta_r - one)**two)  !ale
+    struc_weight = exp(-1000.0_dp*abs(eta_r - one)**two)  !ale
     bet = bet*(one - struc_weight) + bet1*(struc_weight) !ale
 
     ! compute helical scalar and vector
@@ -457,8 +458,8 @@
     dmn(3,2) = coeff(9)
     dmn(3,3) = coeff(10)
 
-    cir(1,1) = phi
-    cir(1,2) = gam
+    cir(1,1) = trace_aa
+    cir(1,2) = r_ratio
     cir(1,3) = eta_r
 
   end subroutine asbm

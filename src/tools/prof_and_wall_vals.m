@@ -182,6 +182,17 @@ for j = 1:jmax
             ww(j,i)      = temp(i,16);
             uv(j,i)      = temp(i,17);
             
+        elseif strcmp(model, 'wrsm')
+            
+            turb1(j,i,1) = temp(i,13);
+            muLam(j,i,1) = temp(i,14);
+            dudy(j,i,1)  = temp(i,15);
+            muT(j,i,1)   = temp(i,16);
+            uu(j,i)      = temp(i,17);
+            vv(j,i)      = temp(i,18);
+            ww(j,i)      = temp(i,19);
+            uv(j,i)      = temp(i,20);
+            
         end
     end
 end
@@ -309,12 +320,18 @@ elseif strcmp(model,'v2f')
 elseif strcmp(model,'keps')
     k(:,1)   = turb1(imatch-1,:) + fak*(turb1(imatch,:) - turb1(imatch-1,:));
     eps(:,1) = turb2(imatch-1,:) + fak*(turb2(imatch,:) - turb2(imatch-1,:));
+elseif strcmp(model,'wrsm')
+    om(:,1) = turb1(imatch-1,:) + fak*(turb1(imatch,:) - turb1(imatch-1,:));
 end
 
 r11(:,1) = uu(imatch-1,:) + fak*(uu(imatch,:) - uu(imatch-1,:));
 r22(:,1) = vv(imatch-1,:) + fak*(vv(imatch,:) - vv(imatch-1,:));
 r33(:,1) = ww(imatch-1,:) + fak*(ww(imatch,:) - ww(imatch-1,:));
 r12(:,1) = uv(imatch-1,:) + fak*(uv(imatch,:) - uv(imatch-1,:));
+
+if strcmp(model,'wrsm')
+    k = -0.5*(r11 + r22 + r33)./d;
+end
 
 eddy_visc(:,1) = muT(imatch-1,:) + fak*(muT(imatch,:) - muT(imatch-1,:));
 
@@ -374,7 +391,7 @@ if strcmp(model,'sa')
     fclose(prof);
     
     prof = fopen('profilesNew.dat','w');
-    fprintf(prof, 'n=%d\td=%d\n', length(y), 6);
+    fprintf(prof, 'n=%d\td=%d\tc=1\n', length(y), 6);
     for j = 1:length(y)
         fprintf(prof,'%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\n',...
             y(j),d(j),u(j),v(j),P(j),nuhat(j));
@@ -395,12 +412,12 @@ elseif strcmp(model,'sst')
         fprintf(prof,'%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\n',...
             y(j),u(j),v(j),P(j),k_plus(j),om(j),y_plus(j),u_plus(j),...
             uprime_plus(j),vprime_plus(j),wprime_plus(j),r12_plus(j),...
-            eddy_visc(i),xbary(j),ybary(j));
+            eddy_visc(j),xbary(j),ybary(j));
     end   
     fclose(prof);
     
     prof = fopen('profilesNew.dat','w');
-    fprintf(prof, 'n=%d\td=%d\n', length(y), 7);
+    fprintf(prof, 'n=%d\td=%d\tc=1\n', length(y), 7);
     for j = 1:length(y)
         fprintf(prof,'%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\n',...
             y(j),d(j),u(j),v(j),P(j),k(j),om(j));
@@ -426,7 +443,7 @@ elseif strcmp(model,'v2f')
     fclose(prof);
     
     prof = fopen('profilesNew.dat','w');
-    fprintf(prof, 'n=%d\td=%d\n', length(y), 9);
+    fprintf(prof, 'n=%d\td=%d\tc=1\n', length(y), 9);
     for j = 1:length(y)
         fprintf(prof,'%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\n',...
             y(j),d(j),u(j),v(j),P(j),k(j),eps(j),v2(j),f(j));
@@ -452,12 +469,39 @@ elseif strcmp(model,'keps')
     fclose(prof);
     
     prof = fopen('profilesNew.dat','w');
-    fprintf(prof, 'n=%d\td=%d\n', length(y), 7);
+    fprintf(prof, 'n=%d\td=%d\tc=1\n', length(y), 7);
     for j = 1:length(y)
         fprintf(prof,'%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\n',...
             y(j),d(j),u(j),v(j),P(j),k(j),eps(j));
     end
-    fclose(prof);    
+    fclose(prof);
+    
+elseif strcmp(model,'wrsm') 
+    
+    prof = fopen('profilesTec.dat','w');
+    
+    fprintf(prof,'VARIABLES = "y/h", "u", "v", "P", "k+", "om", "y+",');
+    fprintf(prof,' "U+", "uprime+", "vprime+", "wprime+", "r12+",');
+    fprintf(prof,' "muT", "xbary", "ybary"\n');
+    
+    fprintf(prof,'ZONE t="turbulent profile"\n');
+    for jj = 1:length(y)
+        j= length(y)-jj+1;
+        fprintf(prof,'%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\n',...
+            y(j),u(j),v(j),P(j),k_plus(j),om(j),y_plus(j),u_plus(j),...
+            uprime_plus(j),vprime_plus(j),wprime_plus(j),r12_plus(j),...
+            eddy_visc(j),xbary(j),ybary(j));
+    end   
+    fclose(prof);
+    
+    prof = fopen('profilesNew.dat','w');
+    fprintf(prof, 'n=%d\td=%d\tc=1\n', length(y), 7);
+    for j = 1:length(y)
+        fprintf(prof,'%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\t%.8e\n',...
+            y(j),d(j),u(j),v(j),P(j),-r11(j)/d(j),-r22(j)/d(j),-r33(j)/d(j),...
+            -r12(j)/d(j),0.0, 0.0, om(j));
+    end
+    fclose(prof);
 end
 
 end

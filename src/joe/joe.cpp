@@ -7,6 +7,7 @@
 #include "turbModels/TurbModel_V2F.h"
 #include "turbModels/TurbModel_EASM.h"
 #include "turbModels/TurbModel_ASBM.h"
+#include "turbModels/TurbModel_WRSM.h"
 #include "turbModels/TransModel_GaReT.h"
 
 
@@ -398,6 +399,21 @@ public:
   }
 
   virtual ~MyJoeASBMkom() {}
+};
+
+/*
+ * MyJoe with WRSM model
+ */
+class MyJoeWRSM: public MyJoe, public RansTurbWRSM
+{
+public:
+  MyJoeWRSM(char *name) : MyJoe(name), UgpWithCvCompFlow(name)
+  {
+    if (mpi_rank == 0)
+      cout << "MyJoeWRSM()" << endl;
+  }
+
+  virtual ~MyJoeWRSM() {}
 };
 
 /*
@@ -882,7 +898,7 @@ public:
 };
 
 /*
- * Flat channel with inlet and outlet bcs
+ * Given the turbulence compute the mean flow
  */
 class NonPerChan: public MyJoe{
 public:
@@ -1284,6 +1300,152 @@ public:
 };
 
 /*
+ * Given the mean flow compute the turbulence
+ */
+class MeanToTurb: public MyJoeEASMkom{
+
+public:
+  MeanToTurb(char *name) : MyJoeEASMkom(name), UgpWithCvCompFlow(name)
+  {
+    if (mpi_rank == 0) cout << "MeanToTurb()" << endl;
+  }
+
+  virtual ~MeanToTurb() {}
+
+  void initialHook()
+  {
+    MyJoe::initialHook();
+
+    readMeanFlow();
+  }
+
+  void readMeanFlow()
+  {
+    int    nx;             // number of nodes in stream-wise direction
+    int    ny;             // number of nodes in cross-stream direction
+    int    nval;           // number of variables in the file
+    double ***meanFlow;    // holder for input profile data
+
+    // Read the Reynolds stresses
+    FILE *ifile;
+    if ((ifile=fopen("./meanFlow.txt", "rt")) == NULL)
+    {
+      cout << "could not open meanFlow.txt" << endl;
+      throw(-1);
+    }
+
+    // file values: x y rhou press uu vv ww uv
+    fscanf(ifile, "nx=%d\tny=%d\tnval=%d", &nx, &ny, &nval);
+    meanFlow = new double** [nx];
+    for (int i = 0; i < nx; i++){
+      meanFlow[i] = new double* [ny];
+      for (int j = 0; j < ny; j++)
+        meanFlow[i][j] = new double [nval];
+    }
+
+    for (int i = 0; i < nx; i++)
+      for (int j = 0; j < ny; j++)
+        for (int v=0; v < nval; v++)
+          fscanf(ifile, "%lf", &meanFlow[i][j][v]);
+
+    fclose(ifile);
+
+    // Interpolate
+    double vel11, vel12, vel21, vel22;
+    double vel1, vel2;
+
+    for (int icv=0; icv<ncv; icv++)
+    {
+      int posx = 1, posy = 1;
+      double fx, fy;
+
+      // while posx and posx-1 don't sandwich x_cv, keep increasing posx
+      while(meanFlow[posx][0][0] < x_cv[icv][0] && (posx < nx-1))
+        posx++;
+      // if input profiles don't have a node high enough to sandwich x_cv[icv]
+      if (x_cv[icv][0] > meanFlow[posx][0][0])
+        fx = 1.0;
+      // if input profiles don't have a node low enough to sandwich x_cv[icv]
+      else if (x_cv[icv][0] < meanFlow[posx-1][0][0])
+        fx = 0.0;
+      else
+        fx = (x_cv[icv][0] - meanFlow[posx-1][0][0])/(meanFlow[posx][0][0] - meanFlow[posx-1][0][0]);
+
+      // while posy and posy-1 don't sandwich x_cv, keep increasing posy
+      while(meanFlow[posx][posy][1] < x_cv[icv][1] && (posy < ny-1))
+        posy++;
+      // if input profiles don't have a node high enough to sandwich x_cv[icv]
+      if (x_cv[icv][1] > meanFlow[posx][posy][1])
+        fy = 1.0;
+      // if input profiles don't have a node low enough to sandwich x_cv[icv]
+      else if (x_cv[icv][1] < meanFlow[posx][posy-1][1])
+        fy = 0.0;
+      else
+        fy = (x_cv[icv][1] - meanFlow[posx][posy-1][1])/(meanFlow[posx][posy][1] - meanFlow[posx][posy-1][1]);
+
+      vel11 = meanFlow[posx-1][posy-1][2];
+      vel12 = meanFlow[posx][posy-1][2];
+      vel21 = meanFlow[posx-1][posy][2];
+      vel22 = meanFlow[posx][posy][2];
+      vel1 = vel11 + fx*(vel12 - vel11);
+      vel2 = vel21 + fx*(vel22 - vel21);
+      rhou[icv][0] = vel1 + fy*(vel2 - vel1);
+
+      vel11 = meanFlow[posx-1][posy-1][3];
+      vel12 = meanFlow[posx][posy-1][3];
+      vel21 = meanFlow[posx-1][posy][3];
+      vel22 = meanFlow[posx][posy][3];
+      vel1 = vel11 + fx*(vel12 - vel11);
+      vel2 = vel21 + fx*(vel22 - vel21);
+      rhou[icv][1] = vel1 + fy*(vel2 - vel1);
+
+      rhou[icv][2] = 0.0;
+    }
+
+    updateCvData(rhou, REPLACE_ROTATE_DATA);
+
+    for (int i = 0; i < 0; i++)
+    {
+      smoothingVec(rhou);
+      updateCvData(rhou, REPLACE_ROTATE_DATA);
+    }
+  }
+
+  void smoothingVec(double (*input)[3])
+  {
+    double vol_tot, vol_icv;
+    for (int icv = 0; icv < ncv; icv++)
+    {
+      vol_tot = cv_volume[icv];
+
+      input[icv][0] *= vol_tot;
+      input[icv][1] *= vol_tot;
+      input[icv][2] *= vol_tot;
+
+      int noc_f = nbocv_i[icv];
+      int noc_l = nbocv_i[icv + 1] - 1;
+
+      for (int noc = noc_f + 1; noc <= noc_l; noc++)
+      {
+        int icv_nbr = nbocv_v[noc];
+
+        vol_icv = cv_volume[icv_nbr];
+        vol_tot += vol_icv;
+
+        input[icv][0] += input[icv_nbr][0]*vol_icv;
+        input[icv][1] += input[icv_nbr][1]*vol_icv;
+        input[icv][2] += input[icv_nbr][2]*vol_icv;
+      }
+
+      input[icv][0] /= vol_tot;
+      input[icv][1] /= vol_tot;
+      input[icv][2] /= vol_tot;
+    }
+  }
+
+};
+
+/*
  * Main Main Main Main Main Main
  */
 int main(int argc, char *argv[])
@@ -1335,6 +1497,8 @@ int main(int argc, char *argv[])
     case 6:   joe = new MyJoeEASMkom(inputFileName);    break;
     case 7:   joe = new MyJoeASBMkeps(inputFileName);   break;
     case 8:   joe = new MyJoeASBMkom(inputFileName);    break;
+    case 9:   joe = new MyJoeWRSM(inputFileName);       break;
+    case 10:  joe = new MeanToTurb(inputFileName);      break;
     case 11:  joe = new BaryMaps(inputFileName);        break;
     case 12:  joe = new NonPerChan(inputFileName);      break;
     default: 

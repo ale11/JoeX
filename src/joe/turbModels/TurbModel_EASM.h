@@ -12,6 +12,12 @@ public: // constructor, destructor
 
     rij_diag_nd   = NULL;     registerVector(rij_diag_nd,    "rij_diag_nd",  CV_DATA);
     rij_offdiag_nd = NULL;    registerVector(rij_offdiag_nd, "rij_offdiag_nd", CV_DATA);
+
+    ver2 = getIntParam("VERSION2", "0");
+
+    debug1 = NULL;     registerVector(debug1,         "debug1",         CV_DATA);
+    debug2 = NULL;     registerVector(debug2,         "debug2",         CV_DATA);
+    debug3 = NULL;     registerVector(debug3,         "debug3",         CV_DATA);
   }
 
   virtual ~RansTurbEASM() {}
@@ -21,6 +27,12 @@ public: // member variables
 
   double (*rij_diag_nd)[3];
   double (*rij_offdiag_nd)[3];
+
+  double (*debug1)[3];
+  double (*debug2)[3];
+  double (*debug3)[3];
+
+  int ver2;
 
 public:
   virtual void calcRsCenterEASM()
@@ -33,9 +45,15 @@ public:
     double c3    = 1.25;
     double c4    = 0.4;
 
+    double c2r = 1.2;
+    double cs = 0.84;
+    double ca = 4.0;
+    double cb = -10.0;
+
     double gamma0 = 0.5*c11;
     double gamma1 = 0.5*c10 + (ceps2 - ceps1)/(ceps1 - 1.0);
-    double a1     = 0.5*(4./3. - c2);
+
+    double a1     = 0.5*(4.0/3.0 - c2);
     double a2     = 0.5*(2.0 - c4);
     double a3     = 0.5*(2.0 - c3);
 
@@ -117,10 +135,19 @@ public:
       R2e2t2 = WijWij*tau*tau;
       e2t2G0 = e2t2*gamma0;
 
+      double f = 0.5*(1.0 + tanh(0.5*ca*strMag[icv]*tau + cb));
+      if (ver2) a1 = 2.0/3.0 - 0.5*c2r + 0.5*(c2r - c2)*f;
+
       p = -gamma1/(e2t2G0);
       q = (gamma1*gamma1 - 2.0*e2t2G0*a1 - 2.0/3.0*e2t2*a3*a3 + 2.0*R2e2t2*a2*a2);
       q /= 4.0*e2t2G0*e2t2G0;
       r = gamma1*a1/(4.0*e2t2G0*e2t2G0);
+
+      if (ver2)
+      {
+      	p += cs*(1.0 - f)/(2.0*gamma0);
+      	q -= gamma1*(1.0 - f)*cs*e2t2/(4.0*e2t2G0*e2t2G0);
+      }
 
       // Compute Cmustar
       if (e2t2 < 1.0e-6)
@@ -187,6 +214,51 @@ public:
       rij_offdiag_nd[icv][0] = r12;
       rij_offdiag_nd[icv][1] = r13;
       rij_offdiag_nd[icv][2] = r23;
+
+      double b1kSk1 = (r11 - 1.0/3.0)*S11 + r12*S21 + r13*S31;
+      double b2kSk2 = r12*S12 + (r22 - 1.0/3.0)*S22 + r23*S32;
+      double b3kSk3 = r13*S13 + r23*S23 + (r33 - 1.0/3.0)*S33;
+      double b1kSk2 = (r11 - 1.0/3.0)*S12 + r12*S22 + r13*S32;
+      double b1kSk3 = (r11 - 1.0/3.0)*S13 + r12*S23 + r13*S33;
+      double b2kSk3 = r12*S13 + (r22 - 1.0/3.0)*S23 + r23*S33;
+      double b2kSk1 = r12*S11 + (r22 - 1.0/3.0)*S21 + r23*S31;
+      double b3kSk1 = r13*S11 + r23*S21 + (r33 - 1.0/3.0)*S31;
+      double b3kSk2 = r13*S12 + r23*S22 + (r33 - 1.0/3.0)*S32;
+
+      double bnmSnm = b1kSk1 + b2kSk2 + b3kSk3;
+
+      double b1kWk1 = (r11 - 1.0/3.0)*W11 + r12*W21 + r13*W31;
+      double b2kWk2 = r12*W12 + (r22 - 1.0/3.0)*W22 + r23*W32;
+      double b3kWk3 = r13*W13 + r23*W23 + (r33 - 1.0/3.0)*W33;
+      double b1kWk2 = (r11 - 1.0/3.0)*W12 + r12*W22 + r13*W32;
+      double b1kWk3 = (r11 - 1.0/3.0)*W13 + r12*W23 + r13*W33;
+      double b2kWk3 = r12*W13 + (r22 - 1.0/3.0)*W23 + r23*W33;
+      double b2kWk1 = r12*W11 + (r22 - 1.0/3.0)*W21 + r23*W31;
+      double b3kWk1 = r13*W11 + r23*W21 + (r33 - 1.0/3.0)*W31;
+      double b3kWk2 = r13*W12 + r23*W22 + (r33 - 1.0/3.0)*W32;
+
+      double Peps = -2.0*tau*(r11*S11 + r22*S22 + r33*S33 + 2.0*(r12*S12 + r13*S13 + r23*S23));
+      double c2star = c2r + (c2 - c2r)*f + cs*Peps*(f - 1.0);
+
+      //debug1[icv][0] = Peps;
+      //debug1[icv][1] = f;
+      //debug1[icv][2] = c2star;
+
+      if (ver2) c2 = c2star;
+
+      //debug2[icv][0] = -(c10 + c11*Peps)*(r11 - 1.0/3.0) + c2*S11*tau
+      //		             +c3*(b1kSk1 + b1kSk1 - 2.0/3.0*bnmSnm)*tau - c4*(b1kWk1 + b1kWk1)*tau;
+      //debug2[icv][1] = -(c10 + c11*Peps)*(r22 - 1.0/3.0) + c2*S22*tau
+      //		             +c3*(b2kSk2 + b2kSk2 - 2.0/3.0*bnmSnm)*tau - c4*(b2kWk2 + b2kWk2)*tau;
+      //debug2[icv][2] = -(c10 + c11*Peps)*(r33 - 1.0/3.0) + c2*S33*tau
+      //		             +c3*(b3kSk3 + b3kSk3 - 2.0/3.0*bnmSnm)*tau - c4*(b3kWk3 + b3kWk3)*tau;
+
+      //debug3[icv][0] = -(c10 + c11*Peps)*r12 + c2*S12*tau
+      //		             +c3*(b1kSk2 + b2kSk1)*tau - c4*(b1kWk2 + b2kWk1)*tau;
+      //debug3[icv][1] = -(c10 + c11*Peps)*r13 + c2*S13*tau
+      //		             +c3*(b1kSk3 + b3kSk1)*tau - c4*(b1kWk3 + b3kWk1)*tau;
+      //debug3[icv][2] = -(c10 + c11*Peps)*r23 + c2*S23*tau
+      //		             +c3*(b2kSk3 + b3kSk2)*tau - c4*(b2kWk3 + b3kWk2)*tau;
     }
 
     updateCvData(cmus, REPLACE_DATA);
@@ -225,6 +297,8 @@ public:
 
     SIG_K = getDoubleParam("SIG_K"  , "1.0");
     SIG_O = 0.41*0.41/(sqrt(C_MU)*(BETA - G_OM));
+
+    if (ver2) SIG_O = 1.0/0.65;
 
     LIMIT_PK   = getIntParam("LIMIT_PK"  , "1");
     REALIZABLE = getIntParam("REALIZABLE", "0");
@@ -368,6 +442,7 @@ public:
   {
     if (name == "kine")
     {
+    	calcCvScalarGrad(grad_kine,  kine,  kine_bfa,  gradreconstruction, limiterNavierS, kine,  epsilonSDWLS);
       for (int icv = 0; icv < ncv; icv++)
       {
         double src  = getTurbProd(icv) - fbstar[icv]*rho[icv]*kine[icv]*omega[icv];
@@ -380,6 +455,10 @@ public:
           int noc00 = nbocv_i[icv];
           A[noc00] -= dsrcdphi*cv_volume[icv];
         }
+
+        debug1[icv][0] = getTurbProd(icv)/rho[icv]; //*cv_volume[icv];
+        debug1[icv][1] = -fbstar[icv]*kine[icv]*omega[icv]; //*cv_volume[icv];
+        debug1[icv][2] = vel[icv][0]*grad_kine[icv][0] + vel[icv][1]*grad_kine[icv][1] + vel[icv][2]*grad_kine[icv][2];
       }
     }
 
