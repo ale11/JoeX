@@ -190,6 +190,12 @@ public:
       muT[icv] = min(rho[icv]*kine[icv]/omega[icv], 1000.0);
     }
 
+    updateCvData(R11, REPLACE_DATA);
+    updateCvData(R22, REPLACE_DATA);
+    updateCvData(R33, REPLACE_DATA);
+    updateCvData(R12, REPLACE_DATA);
+    updateCvData(R13, REPLACE_DATA);
+    updateCvData(R23, REPLACE_DATA);
     updateCvData(rij_diag, REPLACE_ROTATE_DATA);
     updateCvData(rij_offdiag, REPLACE_ROTATE_DATA);
     updateCvData(kine, REPLACE_DATA);
@@ -326,23 +332,21 @@ public:
 
       for (int icv = 0; icv < ncv; icv++)
       {
-      	double prod, diss, crossDiff;
-      	double trace_Sb = 0.0, chiOm = 0.0, fbeta, beta, sigmad;
-      	double grad_kine[3], S_hat[3][3];
-
       	calcStrainTensor(icv,S);
         calcRotationTensor(icv,W);
         calcAnisotropyTensor(icv,b);
 
         // Production of omega
+      	double trace_Sb = 0.0;
         for (int m = 0; m < 3; m++)
         	for (int n = 0; n < 3; n++)
         		trace_Sb += S[m][n]*b[n][m];
 
-        prod = -alpha*omega[icv]*2.0*(trace_Sb + 1.0/3.0*diverg[icv]);
+        double prod = -alpha*omega[icv]*2.0*(trace_Sb + 1.0/3.0*diverg[icv]);
         prod = max(prod, 0.0);
 
         // Destruction of omega
+        double S_hat[3][3];
         for (int i=0; i<3; i++)
           for (int j=0; j<3; j++)
           {
@@ -351,20 +355,24 @@ public:
             else        S_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
           }
 
+        double chiOm = 0.0;
         for (int i=0; i<3; i++)
           for (int j=0; j<3; j++)
             for (int k=0; k<3; k++)
               chiOm += W[i][j]*W[j][k]*S_hat[k][i];
         chiOm = fabs(chiOm/pow(beta_s*omega[icv], 3.0));
 
-        fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
-        beta  = beta_0*fbeta;
-        diss  = beta*omega[icv]*omega[icv];
+        double fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
+        double beta  = beta_0*fbeta;
+        double diss  = beta*omega[icv]*omega[icv];
 
         // Cross-diffusion of omega
+      	double grad_kine[3];
         for (int i = 0; i < 3; i++)
         	grad_kine[i] = 0.5*(grad_R11[icv][i] + grad_R22[icv][i] + grad_R33[icv][i]);
-        crossDiff = vecDotVec3d(grad_kine, grad_omega[icv]);
+
+        double crossDiff = vecDotVec3d(grad_kine, grad_omega[icv]);
+        double sigmad;
         if (crossDiff <= 0.0) sigmad = 0.0;
         else                  sigmad = 0.125;
         crossDiff *= sigmad/omega[icv];
@@ -384,62 +392,127 @@ public:
   }
 
   virtual void sourceHookRansTurbCoupled(double **rhs, double ***A, int nScal, int flagImplicit)
-  {/*
-    int kine_Index = getScalarTransportIndex("kine");
+  {
+    int R11_Index = getScalarTransportIndex("R11");
+    int R22_Index = getScalarTransportIndex("R22");
+    int R33_Index = getScalarTransportIndex("R33");
+    int R12_Index = getScalarTransportIndex("R12");
+    int R13_Index = getScalarTransportIndex("R13");
+    int R23_Index = getScalarTransportIndex("R23");
     int omega_Index = getScalarTransportIndex("omega");
 
-    double OM[3][3], STR_hat[3][3];
+    double S[3][3], W[3][3], b[3][3];
 
-    calcCvScalarGrad(grad_kine,  kine,  kine_bfa,  gradreconstruction, limiterNavierS, kine,  epsilonSDWLS);
+    double p3 = 2.0/3.0*(alpha_h + beta_h) - 0.5*gamma_h;
+    double p4 = alpha_h + beta_h;
+    double p5 = alpha_h - beta_h;
+    double delta[3][3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+
+  	calcCvScalarGrad(grad_R11, R11, R11_bfa, gradreconstruction, limiterNavierS, R11, epsilonSDWLS);
+  	calcCvScalarGrad(grad_R22, R22, R22_bfa, gradreconstruction, limiterNavierS, R22, epsilonSDWLS);
+  	calcCvScalarGrad(grad_R33, R33, R33_bfa, gradreconstruction, limiterNavierS, R33, epsilonSDWLS);
     calcCvScalarGrad(grad_omega, omega, omega_bfa, gradreconstruction, limiterNavierS, omega, epsilonSDWLS);
 
     for (int icv = 0; icv < ncv; icv++)
     {
-      // Production of tke
-      double Pk = muT[icv]*strMag[icv]*strMag[icv] - 2.0/3.0*rho[icv]*kine[icv]*diverg[icv];
-      Pk = max(Pk, 0.0);
+    	calcStrainTensor(icv,S);
+      calcRotationTensor(icv,W);
+      calcAnisotropyTensor(icv,b);
 
-      // Destruction of omega
-      for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
+      double trace_Sb = 0.0;
+      for (int m = 0; m < 3; m++)
+      	for (int n = 0; n < 3; n++)
+      		trace_Sb += S[m][n]*b[n][m];
+
+      double h4[3][3] = { {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0} };
+      double h5[3][3] = { {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0} };
+      double srcRij[3][3] = { {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0} };
+
+      // REYNOLDS STRESSES
+      for (int i = 0; i < 3; i++)
+      	for (int j = i; j < 3; j++)
+      	{
+      		// Integrity basis
+      		for (int k = 0; k < 3; k++)
+      			h4[i][j] += S[i][k]*b[k][j] + b[i][k]*S[k][j];
+      		h4[i][j] -= 2.0/3.0*trace_Sb*delta[i][j];
+
+      		for (int k = 0; k < 3; k++)
+      			h5[i][j] += W[i][k]*b[k][j] - b[i][k]*W[k][j];
+
+          // Sources
+          double prod = -2.0*kine[icv]*(h4[i][j] + 2.0/3.0*trace_Sb*delta[i][j] + h5[i][j] + 2.0/3.0*S[i][j]);
+
+          double eps = beta_s*kine[icv]*omega[icv];
+
+          double redi = - 2.0*C1*eps*b[i][j] + 2.0*kine[icv]*(p4*h4[i][j] + p5*h5[i][j]
+                        + p3*(S[i][j] - 1.0/3.0*diverg[icv]*delta[i][j]));
+
+          // Total contribution
+          srcRij[i][j] = rho[icv]*(prod + redi - 2.0/3.0*eps*delta[i][j]);
+      	}
+
+      // OMEGA
+      // Production
+      double prod = -alpha*omega[icv]*2.0*(trace_Sb + 1.0/3.0*diverg[icv]);
+      prod = max(prod, 0.0);
+
+      // Destruction
+      double S_hat[3][3];
+      for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
         {
-          OM[i][j] = 0.5*(grad_u[icv][i][j] - grad_u[icv][j][i]);
 
-          // STR_hat subtracts 0.5 divergence instead 1/3, no bug!!!
-          if (i==j)   STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i] - diverg[icv]);
-          else        STR_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
+          // S_hat subtracts 0.5 divergence instead 1/3, no bug!!!
+          if (i==j)   S_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i] - diverg[icv]);
+          else        S_hat[i][j] = 0.5*(grad_u[icv][i][j] + grad_u[icv][j][i]);
         }
 
       double chiOm = 0.0;
       for (int i=0; i<3; i++)
         for (int j=0; j<3; j++)
           for (int k=0; k<3; k++)
-            chiOm += OM[i][j]*OM[j][k]*STR_hat[k][i];
-      chiOm = fabs(chiOm/pow(betaStar*omega[icv], 3.0));
+            chiOm += W[i][j]*W[j][k]*S_hat[k][i];
+      chiOm = fabs(chiOm/pow(beta_s*omega[icv], 3.0));
 
       double fbeta = (1.0 + 85.0*chiOm)/(1.0 + 100.0*chiOm);
-      double beta = beta0*fbeta;
+      double beta  = beta_0*fbeta;
+      double diss  = beta*omega[icv]*omega[icv];
 
-      // Cross-diffusion of omega
+      // Cross-diffusion
+    	double grad_kine[3];
+      for (int i = 0; i < 3; i++)
+      	grad_kine[i] = 0.5*(grad_R11[icv][i] + grad_R22[icv][i] + grad_R33[icv][i]);
+
+      double crossDiff = vecDotVec3d(grad_kine, grad_omega[icv]);
       double sigmad;
-      double crossDiff = vecDotVec3d(grad_kine[icv], grad_omega[icv]);
       if (crossDiff <= 0.0) sigmad = 0.0;
-      else                  sigmad = sigmad0;
+      else                  sigmad = 0.125;
+      crossDiff *= sigmad/omega[icv];
 
-      double src =  alfa*omega[icv]/kine[icv]*Pk
-                  - beta*rho[icv]*omega[icv]*omega[icv]
-                  + sigmad*rho[icv]/omega[icv]*crossDiff;
+      double srcOm =  rho[icv]*(prod - diss + crossDiff);
 
-      rhs[icv][5+kine_Index]  += (Pk - betaStar*rho[icv]*omega[icv]*kine[icv])*cv_volume[icv];
-      rhs[icv][5+omega_Index] += src*cv_volume[icv];
+      // RERSIDUALS AND JACOBIANS
+      rhs[icv][5+R11_Index]   += srcRij[0][0]*cv_volume[icv];
+      rhs[icv][5+R22_Index]   += srcRij[1][1]*cv_volume[icv];
+      rhs[icv][5+R33_Index]   += srcRij[2][2]*cv_volume[icv];
+      rhs[icv][5+R12_Index]   += srcRij[0][1]*cv_volume[icv];
+      rhs[icv][5+R13_Index]   += srcRij[0][2]*cv_volume[icv];
+      rhs[icv][5+R23_Index]   += srcRij[1][2]*cv_volume[icv];
+      rhs[icv][5+omega_Index] += srcOm*cv_volume[icv];
 
       if (flagImplicit)
       {
         int noc00 = nbocv_i[icv];
-        A[noc00][5+kine_Index][5+kine_Index]   -= - betaStar*omega[icv]*cv_volume[icv];
+        A[noc00][5+R11_Index][5+R11_Index] -= -(1.0/3.0*beta_s*omega[icv] + 2.0/3.0*C1*beta_s*omega[icv])*cv_volume[icv];
+        A[noc00][5+R22_Index][5+R22_Index] -= -(1.0/3.0*beta_s*omega[icv] + 2.0/3.0*C1*beta_s*omega[icv])*cv_volume[icv];
+        A[noc00][5+R33_Index][5+R33_Index] -= -(1.0/3.0*beta_s*omega[icv] + 2.0/3.0*C1*beta_s*omega[icv])*cv_volume[icv];
+        A[noc00][5+R12_Index][5+R12_Index] -= -C1*beta_s*omega[icv]*cv_volume[icv];
+        A[noc00][5+R13_Index][5+R13_Index] -= -C1*beta_s*omega[icv]*cv_volume[icv];
+        A[noc00][5+R23_Index][5+R23_Index] -= -C1*beta_s*omega[icv]*cv_volume[icv];
         A[noc00][5+omega_Index][5+omega_Index] -= - 2.0*beta*omega[icv]*cv_volume[icv];
      }
-    }*/
+    }
   }
 
   virtual void boundaryHookScalarRansTurb(double *phi_fa, FaZone *zone, const string &name)
