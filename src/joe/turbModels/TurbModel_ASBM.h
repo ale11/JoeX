@@ -978,9 +978,7 @@ public:
     if (name == "eps")
       for (int icv = 0; icv < ncv; icv++)
       {
-        // the reference value is 0.05
-        // another good value is 0.0175
-        double ce1 = CEPS1*(1.0 + 0.045*pow(kine[icv]/v2[icv], 0.5));
+        double ce1 = CEPS1*(1.0 + 0.0425*pow(kine[icv]/v2[icv], 0.5));
 
         double src = (ce1*getTurbProd(icv) - CEPS2*rho[icv]*eps[icv])/turbTS[icv];
         rhs[icv]  += src*cv_volume[icv];
@@ -1055,7 +1053,7 @@ public:
 
       double tau    = kine[icv]/eps[icv];
       double tauKol = 6.0*sqrt(nu/eps[icv]);
-      double tauRel = kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
+      double tauRel = 0.6*kine[icv]/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
 
       switch (LIMIT_TL)
       {
@@ -1072,14 +1070,14 @@ public:
     {
       double nu = calcMuLam(icv)/rho[icv];
 
-      double len    = CL*pow(kine[icv],1.5)/eps[icv];
-      double lenKol = CL*CETA*pow(nu,0.75)/pow(eps[icv],0.25);
+      double len    = pow(kine[icv],1.5)/eps[icv];
+      double lenKol = CETA*pow(nu,0.75)/pow(eps[icv],0.25);
       double lenRel = pow(kine[icv],1.5)/(max(sqrt(3.0)*v2[icv]*C_MU*strMag[icv],1.0e-14));
 
       switch (LIMIT_TL)
       {
-      case 0: turbLS[icv] = len;                         break;
-      case 1: turbLS[icv] = min(max(len,lenKol),lenRel); break;
+      case 0: turbLS[icv] = CL*len;                         break;
+      case 1: turbLS[icv] = CL*max(min(len,lenRel),lenKol); break;
       }
     }
     updateCvData(turbLS, REPLACE_DATA);
@@ -1140,7 +1138,7 @@ public:   // constructors
     beta0    = getDoubleParam("beta0",    "0.0708");
     cLim     = getDoubleParam("cLim",     "0.875");
     CETA     = getDoubleParam("CETA",     "70.0");
-    CL       = getDoubleParam("CL",       "0.23");
+    CL       = getDoubleParam("CL",       "0.03");
 
     RIJ_BASED_PK = getIntParam("RIJ_BASED_PK", "0");
     LIMIT_TL     = getIntParam("LIMIT_TL",     "1");
@@ -1522,7 +1520,7 @@ public:
 
       double tau    = 1.0/max(betaStar*omega[icv],betaStar*cLim*strMag[icv]/sqrt(betaStar));
       double tauKol = 6.0*sqrt(nu/(betaStar*kine[icv]*omega[icv]));
-      double tauRel = sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
+      double tauRel = 0.6*sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
 
       switch (LIMIT_TL)
       {
@@ -1539,14 +1537,14 @@ public:
     {
       double nu = calcMuLam(icv)/rho[icv];
 
-      double len    = CL*pow(kine[icv],0.5)/(betaStar*omega[icv]);
-      double lenKol = CL*CETA*pow(nu,0.75)/pow(betaStar*kine[icv]*omega[icv],0.25);
+      double len    = pow(kine[icv],0.5)/(betaStar*omega[icv]);
+      double lenKol = CETA*pow(nu,0.75)/pow(betaStar*kine[icv]*omega[icv],0.25);
       double lenRel = pow(kine[icv],0.5)*sqrt(3.0)/(max(2.0*betaStar*strMag[icv],1.0e-14));
 
       switch (LIMIT_TL)
       {
-      case 0: turbLS[icv] = len;                         break;
-      case 1: turbLS[icv] = min(max(len,lenKol),lenRel); break;
+      case 0: turbLS[icv] = CL*len;                         break;
+      case 1: turbLS[icv] = CL*max(min(len,lenRel),lenKol); break;
       }
     }
     updateCvData(turbLS,REPLACE_DATA);
